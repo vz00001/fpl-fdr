@@ -169,7 +169,7 @@ def build_ticker(
                 value_cells[str(gw)] = cell_val
                 total += sum(diffs)
 
-        display_cells["Total"] = round(total, 3)
+        display_cells["Total"] = round(total, 2)
         value_cells["Total"] = total
         rows.append(display_cells)
         rows_vals.append(value_cells)
@@ -185,73 +185,61 @@ def build_ticker(
 # UI helpers
 # ---------------------------
 
-def color_for_value(v: float) -> str:
-    """
-    Map 1..5 difficulty -> green..red.
-    1 = very easy (green), 5 = very hard (red).
-    """
-    if math.isnan(v):
-        return "#f2f2f2"
-    # linear gradient green (1) -> yellow (3) -> red (5)
-    # we'll interpolate manually between stops
-    def lerp(a, b, t): return int(a + (b - a) * t)
-    # choose stop
-    if v <= 3:
-        # green -> yellow
-        t = (v - 1) / 2.0
-        r = lerp(46, 255, t)   # 0x2e -> 0xff
-        g = lerp(204, 235, t)  # 0xcc -> 0xeb
-        b = lerp(113, 59, t)   # 0x71 -> 0x3b
-    else:
-        # yellow -> red
-        t = (v - 3) / 2.0
-        r = lerp(255, 231, t)  # 0xff -> 0xe7
-        g = lerp(235, 76, t)   # 0xeb -> 0x4c
-        b = lerp(59, 60, t)    # 0x3b -> 0x3c
-    return f"#{r:02x}{g:02x}{b:02x}"
 
-
-def style_by_values(display_df: pd.DataFrame, values_df: pd.DataFrame) -> pd.io.formats.style.Styler:
+FPL_FDR_COLORS = {
+    1: "#0F6D5D",  # very easy: dark teal green
+    2: "#12F2C2",  # easy: mint/cyan
+    3: "#E6E6E6",  # neutral: light grey
+    4: "#FF3A73",  # hard: hot pink/red
+    5: "#C70042",  # very hard: deep magenta/red
+}
+def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> pd.io.formats.style.Styler:
     """
-    Style fixture ticker with official FPL-like colors:
-    - 1 = dark green
-    - 2 = green
-    - 3 = yellow
-    - 4 = orange
-    - 5 = red
+    Style the ticker to look like the 'official' FDR:
+    - Discrete palette (1..5) -> pill backgrounds
+    - No vertical lines (borderless table; spaced cells)
+    - Team & Total columns kept neutral and bold
     """
-    # Define discrete mapping (like official site)
-    color_map = {
-        1: "#005A32",  # dark green
-        2: "#238B45",  # green
-        3: "#C5C5C5",  # gray
-        4: "#E67E22",  # orange
-        5: "#C0392B",  # red
-    }
+    # Build a same-shaped CSS frame
+    css = pd.DataFrame("", index=disp_df.index, columns=disp_df.columns)
 
-    css = pd.DataFrame("", index=display_df.index, columns=display_df.columns)
-
-    for i in display_df.index:
-        for col in display_df.columns:
-            if col == "Team":
-                css.at[i, col] = "font-weight: 600; background-color: #ffffff;"
-                continue
-            if col == "Total":
-                css.at[i, col] = "font-weight: 600; background-color: #ffffff;"
+    for i in disp_df.index:
+        for col in disp_df.columns:
+            # Neutral, bold columns
+            if col in ("Team", "Total"):
+                css.at[i, col] = "font-weight:700; background-color:#ffffff; color:#000000; text-align:left;"
                 continue
 
-            v = values_df.at[i, col] if (col in values_df.columns) else np.nan
+            v = val_df.at[i, col] if col in val_df.columns else np.nan
             if pd.isna(v):
-                css.at[i, col] = "background-color: #f2f2f2; color: #000000;"
+                css.at[i, col] = "background-color:#F2F2F2; color:#000000; text-align:center;"
             else:
-                # Round difficulty to nearest int for official-style colors
-                v_rounded = int(round(v))
-                bg = color_map.get(v_rounded, "#ffffff")
-                fg = "#000000" if v_rounded <= 3 else "#ffffff"
-                css.at[i, col] = f"background-color: {bg}; color: {fg};"
+                level = int(round(float(v)))
+                bg = FPL_FDR_COLORS.get(level, "#FFFFFF")
+                # Official-like contrast: black text on greens/grey, white on reds
+                text_color = "#000000" if level <= 3 else "#FFFFFF"
+                css.at[i, col] = f"background-color:{bg}; color:{text_color}; text-align:center;"
 
-    return display_df.style.apply(lambda _: css, axis=None)
+    # Apply CSS per-cell
+    styler = disp_df.style.apply(lambda _: css, axis=None)
 
+    # Table-level styling to remove lines and create pill look
+    styler = (
+        styler
+        # No cell borders; space cells so border-radius pills are visible
+        .set_table_attributes('style="border-collapse:separate;border-spacing:6px 8px;width:100%;"')
+        .set_table_styles([
+            {"selector": "td, th", "props": [("border", "0")]},
+            {"selector": "thead th.col_heading", "props": [("font-weight", "700"), ("text-transform", "none")]},
+        ], overwrite=False)
+        # Rounded “pill” cells for GW columns
+        .set_properties(subset=[c for c in disp_df.columns if c not in ("Team", "Total")],
+                        **{"border-radius": "12px", "padding": "6px 10px", "font-weight": "600"})
+        # Slightly bolder Team/Total
+        .set_properties(subset=["Team", "Total"],
+                        **{"padding": "6px 6px", "font-weight": "700"})
+    )
+    return styler
 
 
 
@@ -379,12 +367,5 @@ disp_df, val_df = build_ticker(
 st.subheader("Fixture Ticker")
 st.caption("Green = easier fixtures (lower difficulty). Red = tougher fixtures (higher difficulty).")
 
-styled = style_by_values(disp_df, val_df)
-
-# IMPORTANT: render the Styler with st.write or st.table so colors show up
-st.write(styled)              # ✅ colors preserved
-# st.table(styled)            # also works; table is static
-
-# If you still want a scrollable, interactive grid (but w/o colors), you can also show:
-# st.dataframe(disp_df, width="stretch", hide_index=True)
-
+styled = style_fpl_like(disp_df, val_df)
+st.write(styled)   # not st.dataframe — this preserves the CSS
