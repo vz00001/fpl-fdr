@@ -169,7 +169,7 @@ def build_ticker(
                 value_cells[str(gw)] = cell_val
                 total += sum(diffs)
 
-        display_cells["Total"] = round(total, 2)
+        display_cells["Total"] = round(total, 3)
         value_cells["Total"] = total
         rows.append(display_cells)
         rows_vals.append(value_cells)
@@ -213,12 +213,22 @@ def color_for_value(v: float) -> str:
 
 def style_by_values(display_df: pd.DataFrame, values_df: pd.DataFrame) -> pd.io.formats.style.Styler:
     """
-    Build a Styler with background/text colors based on values_df.
-    - Team column: bold text, neutral background
-    - Blank cells (NaN): light gray
-    - Difficulty 1..5 -> green..red via color_for_value()
+    Style fixture ticker with official FPL-like colors:
+    - 1 = dark green
+    - 2 = green
+    - 3 = yellow
+    - 4 = orange
+    - 5 = red
     """
-    # Build a same-shaped DataFrame of CSS strings
+    # Define discrete mapping (like official site)
+    color_map = {
+        1: "#005A32",  # dark green
+        2: "#238B45",  # green
+        3: "#C5C5C5",  # gray
+        4: "#E67E22",  # orange
+        5: "#C0392B",  # red
+    }
+
     css = pd.DataFrame("", index=display_df.index, columns=display_df.columns)
 
     for i in display_df.index:
@@ -226,18 +236,22 @@ def style_by_values(display_df: pd.DataFrame, values_df: pd.DataFrame) -> pd.io.
             if col == "Team":
                 css.at[i, col] = "font-weight: 600; background-color: #ffffff;"
                 continue
+            if col == "Total":
+                css.at[i, col] = "font-weight: 600; background-color: #ffffff;"
+                continue
 
             v = values_df.at[i, col] if (col in values_df.columns) else np.nan
             if pd.isna(v):
                 css.at[i, col] = "background-color: #f2f2f2; color: #000000;"
             else:
-                bg = color_for_value(float(v))
-                fg = "#000000" if v < 4.4 else "#ffffff"
+                # Round difficulty to nearest int for official-style colors
+                v_rounded = int(round(v))
+                bg = color_map.get(v_rounded, "#ffffff")
+                fg = "#000000" if v_rounded <= 3 else "#ffffff"
                 css.at[i, col] = f"background-color: {bg}; color: {fg};"
 
-    # Apply the CSS DataFrame in one shot (no applymap)
-    styler = display_df.style.apply(lambda _: css, axis=None)
-    return styler
+    return display_df.style.apply(lambda _: css, axis=None)
+
 
 
 
@@ -272,9 +286,9 @@ with st.sidebar:
 
     col_w1, col_w2 = st.columns(2)
     with col_w1:
-        w_team = st.slider("Weight: Team", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+        w_team = st.slider("Weight: Team", min_value=0.0, max_value=1.0, value=0.25, step=0.05)
     with col_w2:
-        w_opp = st.slider("Weight: Opponent", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+        w_opp = st.slider("Weight: Opponent", min_value=0.0, max_value=1.0, value=0.75, step=0.05)
 
     st.caption("Weights only apply to **Team + Opponent**. They’ll be ignored for the other methods.")
 
