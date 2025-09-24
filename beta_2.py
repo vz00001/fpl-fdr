@@ -38,25 +38,35 @@ def load_fpl_data():
     return teams_df, fx_df
 
 
-def strength_to_rating(series: pd.Series) -> pd.Series:
+def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int]) -> pd.Series:
     """
-    Convert 0-100ish 'strength' to a 1-5 rating (5 = tougher opponent).
-    We use quantile bins to mimic "official-like" buckets.
+    Map strengths to 1..5 using explicit thresholds on the raw numbers.
+    `cuts` are the four boundaries separating bands 1|2|3|4|5.
+    Example: cuts=(1100, 1150, 1250, 1330)
+      <=1100 -> 1
+      1101-1150 -> 2
+      1151-1250 -> 3
+      1251-1330 -> 4
+      >1330 -> 5
     """
-    # rank first to avoid duplicate bin edge issues
-    ranked = series.rank(method="first")
-    buckets = pd.qcut(ranked, 5, labels=[1, 2, 3, 4, 5]).astype(int)
-    return buckets
+    c1, c2, c3, c4 = cuts
+    bins = [-np.inf, c1, c2, c3, c4, np.inf]
+    labels = [1, 2, 3, 4, 5]
+    # qcut/cut return Categorical; convert to int
+    return pd.cut(series, bins=bins, labels=labels, include_lowest=True).astype(int)
+
+def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
+    # Tune these once to mirror the table you want
+    cuts = (1040, 1100, 1240, 1340)
 
 
-def default_ratings(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
-    """Create default 1..5 ratings per team (home/away) from strengths."""
-    home = strength_to_rating(teams["str_home"])
-    away = strength_to_rating(teams["str_away"])
-    ratings = {}
-    for tid, h, a in zip(teams["team_id"], home, away):
-        ratings[int(tid)] = {"home": int(h), "away": int(a)}
-    return ratings
+    home = strength_to_fixed_cutpoints(teams["str_away"], cuts=cuts)
+    away = strength_to_fixed_cutpoints(teams["str_home"], cuts=cuts)
+
+    return {
+        int(tid): {"home": int(h), "away": int(a)}
+        for tid, h, a in zip(teams["team_id"], home, away)
+    }
 
 
 # ---------------------------
@@ -245,7 +255,7 @@ with st.spinner("Loading FPL data..."):
 
 # Session state for ratings (persist while the app runs)
 if "ratings" not in st.session_state:
-    st.session_state["ratings"] = default_ratings(teams_df)
+    st.session_state["ratings"] = default_ratings_fixed(teams_df)  # or default_ratings_fixed
 
 # ---------- Sidebar: Tuning ----------
 with st.sidebar:
