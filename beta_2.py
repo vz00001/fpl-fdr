@@ -169,7 +169,7 @@ def build_ticker(
                 value_cells[str(gw)] = cell_val
                 total += sum(diffs)
 
-        display_cells["Total"] = round(total, 3)
+        display_cells["Total"] = round(total, 2)
         value_cells["Total"] = total
         rows.append(display_cells)
         rows_vals.append(value_cells)
