@@ -187,11 +187,11 @@ def build_ticker(
 
 
 FPL_FDR_COLORS = {
-    1: "#0F6D5D",  # very easy: dark teal green
-    2: "#12F2C2",  # easy: mint/cyan
-    3: "#E6E6E6",  # neutral: light grey
-    4: "#FF3A73",  # hard: hot pink/red
-    5: "#C70042",  # very hard: deep magenta/red
+    1: "#34a853",  # very easy: dark teal green
+    2: "#01FC7A",  # easy: mint/cyan
+    3: "#E7E7E7",  # neutral: light grey
+    4: "#E60023",  # hard: hot pink/red
+    5: "#80072d",  # very hard: deep magenta/red
 }
 def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> pd.io.formats.style.Styler:
     """
@@ -367,5 +367,5 @@ disp_df, val_df = build_ticker(
 st.subheader("Fixture Ticker")
 st.caption("Green = easier fixtures (lower difficulty). Red = tougher fixtures (higher difficulty).")
 
-styled = style_fpl_like(disp_df, val_df)
-st.write(styled)   # not st.dataframe — this preserves the CSS
+styled = style_fpl_like(disp_df, val_df).hide(axis="index")
+st.write(styled)
