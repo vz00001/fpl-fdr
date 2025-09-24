@@ -148,7 +148,6 @@ def build_ticker(
                     team_home = (g["home_id"] == tid)
                     opp_id = int(g["away_id"] if team_home else g["home_id"])
                     label = f"{id2short[opp_id]}"
-                    # label += " (H)" if team_home else " (A)"
                     label = label if team_home else label.lower()
 
                     d = compute_fixture_difficulty(
@@ -170,7 +169,7 @@ def build_ticker(
                 value_cells[str(gw)] = cell_val
                 total += sum(diffs)
 
-        display_cells["Total"] = round(total, 2)
+        display_cells["Total"] = round(total, 3)
         value_cells["Total"] = total
         rows.append(display_cells)
         rows_vals.append(value_cells)
@@ -212,26 +211,34 @@ def color_for_value(v: float) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def styler_from_values(display_df: pd.DataFrame, values_df: pd.DataFrame, gw_cols: List[int]):
-    def style_cell(val, col):
-        if col in {"Team"}:
-            return ""
-        try:
-            v = values_df.loc[val.name, col]
-        except Exception:
-            v = np.nan
-        bg = color_for_value(v) if pd.notna(v) else "#f2f2f2"
-        # improve text contrast on darker reds
-        text_color = "#000000" if (pd.isna(v) or v < 4.4) else "#ffffff"
-        return f"background-color: {bg}; color: {text_color};"
+def style_by_values(display_df: pd.DataFrame, values_df: pd.DataFrame) -> pd.io.formats.style.Styler:
+    """
+    Build a Styler with background/text colors based on values_df.
+    - Team column: bold text, neutral background
+    - Blank cells (NaN): light gray
+    - Difficulty 1..5 -> green..red via color_for_value()
+    """
+    # Build a same-shaped DataFrame of CSS strings
+    css = pd.DataFrame("", index=display_df.index, columns=display_df.columns)
 
-    cols = ["Team"] + [str(g) for g in gw_cols] + ["Total"]
-    styled = (display_df[cols]
-              .style
-              .apply(lambda s: [style_cell(None, s.name)] * len(s), axis=1)
-              .applymap(lambda _: "font-weight: 600;", subset=["Team"])
-              .format(precision=2, na_rep=""))
-    return styled
+    for i in display_df.index:
+        for col in display_df.columns:
+            if col == "Team":
+                css.at[i, col] = "font-weight: 600; background-color: #ffffff;"
+                continue
+
+            v = values_df.at[i, col] if (col in values_df.columns) else np.nan
+            if pd.isna(v):
+                css.at[i, col] = "background-color: #f2f2f2; color: #000000;"
+            else:
+                bg = color_for_value(float(v))
+                fg = "#000000" if v < 4.4 else "#ffffff"
+                css.at[i, col] = f"background-color: {bg}; color: {fg};"
+
+    # Apply the CSS DataFrame in one shot (no applymap)
+    styler = display_df.style.apply(lambda _: css, axis=None)
+    return styler
+
 
 
 # ---------------------------
@@ -357,5 +364,13 @@ disp_df, val_df = build_ticker(
 
 st.subheader("Fixture Ticker")
 st.caption("Green = easier fixtures (lower difficulty). Red = tougher fixtures (higher difficulty).")
-styled = styler_from_values(disp_df, val_df, gw_cols)
-st.dataframe(styled, width='stretch', hide_index=True)
+
+styled = style_by_values(disp_df, val_df)
+
+# IMPORTANT: render the Styler with st.write or st.table so colors show up
+st.write(styled)              # ✅ colors preserved
+# st.table(styled)            # also works; table is static
+
+# If you still want a scrollable, interactive grid (but w/o colors), you can also show:
+# st.dataframe(disp_df, width="stretch", hide_index=True)
+
