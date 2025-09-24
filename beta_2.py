@@ -130,24 +130,31 @@ def build_ticker(
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Build (1) a display DF with opponent labels and (2) a numeric DF for styling.
-    Handles blanks and double GWs (averages difficulty within a GW, sums in Total).
+    Alignment is made robust by using a hidden row key (`_tid`) and reindexing val_df
+    to match disp_df after sorting.
     """
     gw_cols = list(range(gw_start, gw_start + gw_len))
     id2short = dict(zip(teams["team_id"], teams["short"]))
-    rows = []
-    rows_vals = []
+
+    rows: List[Dict[str, object]] = []
+    rows_vals: List[Dict[str, object]] = []
 
     for tid in visible_team_ids:
+        if tid not in id2short:
+            # skip if this team id isn't in `teams` (defensive)
+            continue
+
         team_short = id2short[tid]
-        display_cells = {"Team": team_short}
-        value_cells = {"Team": np.nan}
+        display_cells = {"Team": team_short, "_tid": tid}  # <-- hidden key
+        value_cells   = {"Team": np.nan,    "_tid": tid}   # <-- hidden key
 
         total = 0.0
 
         for gw in gw_cols:
-            games = fixtures[(fixtures["event"] == gw) & (
-                (fixtures["home_id"] == tid) | (fixtures["away_id"] == tid)
-            )]
+            games = fixtures[
+                (fixtures["event"] == gw) &
+                ((fixtures["home_id"] == tid) | (fixtures["away_id"] == tid))
+            ]
 
             if games.empty:
                 display_cells[str(gw)] = "—"
@@ -158,8 +165,9 @@ def build_ticker(
                 for _, g in games.iterrows():
                     team_home = (g["home_id"] == tid)
                     opp_id = int(g["away_id"] if team_home else g["home_id"])
-                    label = f"{id2short[opp_id]}"
-                    label = label if team_home else label.lower()
+                    # label style: uppercase for home, lowercase for away (like your current UI)
+                    tag = id2short.get(opp_id, "???")
+                    label = tag if team_home else tag.lower()
 
                     d = compute_fixture_difficulty(
                         team_is_home=team_home,
@@ -171,24 +179,45 @@ def build_ticker(
                         w_team=w_team,
                         w_opp=w_opp,
                     )
+                    diffs.append(float(np.clip(d, 1.0, 5.0)))  # clamp early
                     labels.append(label)
-                    diffs.append(d)
 
-                # If double GW: join labels with "/" and average difficulty for the cell
                 display_cells[str(gw)] = " / ".join(labels)
-                cell_val = float(np.mean(diffs))
-                value_cells[str(gw)] = cell_val
-                total += sum(diffs)
+                value_cells[str(gw)] = float(np.mean(diffs))  # avg for cell color
+                total += sum(diffs)                           # sum for Total
 
-        display_cells["Total"] = round(total, 2)
-        value_cells["Total"] = total
+        # cleaner Total for display; exact total kept in values
+        display_cells["Total"] = int(total) if float(total).is_integer() else round(total, 2)
+        value_cells["Total"]   = float(total)
+
         rows.append(display_cells)
         rows_vals.append(value_cells)
 
+    # ---------------------------
+    # Build frames & ALIGN SAFELY
+    # ---------------------------
     disp_df = pd.DataFrame(rows)
-    val_df = pd.DataFrame(rows_vals)
-    disp_df = disp_df.sort_values("Total", ascending=True, kind="mergesort").reset_index(drop=True)
-    val_df = val_df.loc[disp_df.index].reset_index(drop=True)
+    val_df  = pd.DataFrame(rows_vals)
+
+    if disp_df.empty:
+        # nothing to show
+        return disp_df, val_df
+
+    # Keep column order: Team | GWs... | Total (plus hidden _tid temporarily)
+    ordered_cols = ["Team"] + [str(g) for g in gw_cols] + ["Total", "_tid"]
+    disp_df = disp_df.reindex(columns=ordered_cols)
+    val_df  = val_df.reindex(columns=ordered_cols)
+
+    # sort display by Total (easiest first)
+    disp_df = disp_df.sort_values("Total", ascending=True, kind="mergesort")
+
+    # **Critical step**: reindex val_df by _tid to match disp_df’s order
+    val_df = val_df.set_index("_tid").loc[disp_df["_tid"]].reset_index()
+
+    # drop hidden key in both frames and reset row indices
+    disp_df = disp_df.drop(columns=["_tid"]).reset_index(drop=True)
+    val_df  = val_df.drop(columns=["_tid"]).reset_index(drop=True)
+
     return disp_df, val_df
 
 
