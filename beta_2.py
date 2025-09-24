@@ -204,12 +204,19 @@ FPL_FDR_COLORS = {
     4: "#E60023",  # hard: hot pink/red
     5: "#80072d",  # very hard: deep magenta/red
 }
-def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:   # âœ… use Styler
+
+def _round_half_up(x: float) -> int:
+    # 2.5 -> 3, 3.5 -> 4 (unlike Python round which does bankers rounding)
+    return int(np.floor(x + 0.5))
+
+def _clamp(n: int, lo: int, hi: int) -> int:
+    return max(lo, min(hi, n))
+
+def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
     """
-    Style the ticker to look like the 'official' FDR:
-    - Discrete mint/grey/pink palette
-    - No vertical gridlines (borderless pills)
-    - Team & Total neutral and bold
+    Style the ticker pills with FPL-like discrete colors.
+    - Uses half-up rounding and clamps levels to 1..5 so colors are stable.
+    - Team/Total: neutral, bold.
     """
     css = pd.DataFrame("", index=disp_df.index, columns=disp_df.columns)
 
@@ -223,8 +230,9 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:   # â
             if pd.isna(v):
                 css.at[i, col] = "background-color:#F2F2F2; color:#000000; text-align:center;"
             else:
-                level = int(round(float(v)))
-                bg = FPL_FDR_COLORS.get(level, "#FFFFFF")
+                level = _round_half_up(float(v))
+                level = _clamp(level, 1, 5)
+                bg = FPL_FDR_COLORS[level]
                 fg = "#000000" if level <= 3 else "#FFFFFF"
                 css.at[i, col] = f"background-color:{bg}; color:{fg}; text-align:center;"
 
@@ -265,7 +273,7 @@ with st.sidebar:
     min_gw = int(fixtures_df["event"].min())
     max_gw = int(fixtures_df["event"].max())
     gw_start = st.number_input("First Gameweek", min_value=min_gw, max_value=max_gw, value=min(6, min_gw), step=1)
-    gw_len = st.number_input("Number of gameweeks", min_value=1, max_value=max_gw - gw_start + 1, value=6, step=1)
+    gw_len = st.number_input("Number of gameweeks", min_value=1, max_value=max_gw - gw_start + 1, value=5, step=1)
 
     rating_method = st.selectbox(
         "Rating Method",
@@ -370,3 +378,4 @@ st.caption("Green = easier fixtures (lower difficulty). Red = tougher fixtures (
 
 styled = style_fpl_like(disp_df, val_df).hide(axis="index")
 st.write(styled)
+
