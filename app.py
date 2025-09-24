@@ -7,6 +7,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
+
 st.set_page_config(page_title="FPL FDR (Custom Weights)", layout="wide")
 
 @st.cache_data(ttl=3600)
@@ -35,12 +36,13 @@ def strength_to_rating(series: pd.Series) -> pd.Series:
     buckets = pd.qcut(ranked, 5, labels=[1,2,3,4,5]).astype(int)
     return buckets
 
-def default_ratings(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
+def default_ratings(teams: pd.DataFrame) -> Dict[str, Dict[str, int]]:
     home = strength_to_rating(teams["str_home"])
     away = strength_to_rating(teams["str_away"])
     ratings = {}
-    for tid, h, a in zip(teams["team_id"], home, away):
-        ratings[int(tid)] = {"home": int(h), "away": int(a)}
+    # for tid, h, a in zip(teams["team_id"], home, away):
+    for tid, h, a in zip(teams["short"], home, away):    
+        ratings[tid] = {"home": int(h), "away": int(a)}
     return ratings
 
 # -----------

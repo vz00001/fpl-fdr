@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
+from pandas.io.formats.style import Styler 
 
 st.set_page_config(page_title="FPL FDR (Custom Weights)", layout="wide")
 
@@ -193,19 +194,17 @@ FPL_FDR_COLORS = {
     4: "#E60023",  # hard: hot pink/red
     5: "#80072d",  # very hard: deep magenta/red
 }
-def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> pd.io.formats.style.Styler:
+def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:   # ✅ use Styler
     """
     Style the ticker to look like the 'official' FDR:
-    - Discrete palette (1..5) -> pill backgrounds
-    - No vertical lines (borderless table; spaced cells)
-    - Team & Total columns kept neutral and bold
+    - Discrete mint/grey/pink palette
+    - No vertical gridlines (borderless pills)
+    - Team & Total neutral and bold
     """
-    # Build a same-shaped CSS frame
     css = pd.DataFrame("", index=disp_df.index, columns=disp_df.columns)
 
     for i in disp_df.index:
         for col in disp_df.columns:
-            # Neutral, bold columns
             if col in ("Team", "Total"):
                 css.at[i, col] = "font-weight:700; background-color:#ffffff; color:#000000; text-align:left;"
                 continue
@@ -216,28 +215,20 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> pd.io.formats
             else:
                 level = int(round(float(v)))
                 bg = FPL_FDR_COLORS.get(level, "#FFFFFF")
-                # Official-like contrast: black text on greens/grey, white on reds
-                text_color = "#000000" if level <= 3 else "#FFFFFF"
-                css.at[i, col] = f"background-color:{bg}; color:{text_color}; text-align:center;"
+                fg = "#000000" if level <= 3 else "#FFFFFF"
+                css.at[i, col] = f"background-color:{bg}; color:{fg}; text-align:center;"
 
-    # Apply CSS per-cell
-    styler = disp_df.style.apply(lambda _: css, axis=None)
-
-    # Table-level styling to remove lines and create pill look
     styler = (
-        styler
-        # No cell borders; space cells so border-radius pills are visible
+        disp_df.style
+        .apply(lambda _: css, axis=None)
         .set_table_attributes('style="border-collapse:separate;border-spacing:6px 8px;width:100%;"')
         .set_table_styles([
             {"selector": "td, th", "props": [("border", "0")]},
-            {"selector": "thead th.col_heading", "props": [("font-weight", "700"), ("text-transform", "none")]},
+            {"selector": "thead th.col_heading", "props": [("font-weight", "700")]}
         ], overwrite=False)
-        # Rounded “pill” cells for GW columns
         .set_properties(subset=[c for c in disp_df.columns if c not in ("Team", "Total")],
                         **{"border-radius": "12px", "padding": "6px 10px", "font-weight": "600"})
-        # Slightly bolder Team/Total
-        .set_properties(subset=["Team", "Total"],
-                        **{"padding": "6px 6px", "font-weight": "700"})
+        .set_properties(subset=["Team", "Total"], **{"padding": "6px 6px", "font-weight": "700"})
     )
     return styler
 
