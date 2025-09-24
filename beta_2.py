@@ -149,7 +149,7 @@ def build_ticker(
                     opp_id = int(g["away_id"] if team_home else g["home_id"])
                     label = f"{id2short[opp_id]}"
                     # label += " (H)" if team_home else " (A)"
-                    label = label.upper() if team_home else label
+                    label = label if team_home else label.lower()
 
                     d = compute_fixture_difficulty(
                         team_is_home=team_home,
@@ -358,4 +358,4 @@ disp_df, val_df = build_ticker(
 st.subheader("Fixture Ticker")
 st.caption("Green = easier fixtures (lower difficulty). Red = tougher fixtures (higher difficulty).")
 styled = styler_from_values(disp_df, val_df, gw_cols)
-st.dataframe(styled, use_container_width=True, hide_index=True)
+st.dataframe(styled, width='stretch', hide_index=True)
