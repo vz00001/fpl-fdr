@@ -277,6 +277,25 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
                         **{"border-radius": "12px", "padding": "6px 10px", "font-weight": "600"})
         .set_properties(subset=["Team", "Total"], **{"padding": "6px 6px", "font-weight": "700"})
     )
+
+    # Compact mode tweak
+    if compact:
+        styler = (
+            styler
+            .set_table_attributes(
+                'style="border-collapse:separate; border-spacing:3px 3px; width:100%;"'
+            )
+            .set_table_styles(
+                [
+                    {"selector": "td, th", "props": [("font-size", "12px"), ("line-height", "1.0")]}
+                ],
+                overwrite=False
+            )
+            .set_properties(
+                subset=[c for c in disp_df.columns if c not in ("Team", "Total")],
+                **{"padding": "2px 5px", "border-radius": "8px"}
+            )
+        )    
     return styler
 
 
@@ -405,6 +424,5 @@ disp_df, val_df = build_ticker(
 
 st.subheader("Fixture Ticker")
 st.caption("Green = easier fixtures. Red = tougher fixtures.")
-
-styled = style_fpl_like(disp_df, val_df).hide(axis="index")
+styled = style_fpl_like(disp_df, val_df, compact=True).hide(axis="index")
 st.write(styled)
