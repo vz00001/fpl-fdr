@@ -301,7 +301,7 @@ with st.sidebar:
     # Gameweek range
     min_gw = int(fixtures_df["event"].min())
     max_gw = int(fixtures_df["event"].max())
-    gw_start = st.number_input("First Gameweek", min_value=min_gw, max_value=max_gw, value=min(6, min_gw), step=1)
+    gw_start = st.number_input("First Gameweek", min_value=min_gw, max_value=max_gw, value=min(6, max_gw), step=1)
     gw_len = st.number_input("Number of gameweeks", min_value=1, max_value=max_gw - gw_start + 1, value=5, step=1)
 
     rating_method = st.selectbox(
@@ -312,11 +312,12 @@ with st.sidebar:
 
     col_w1, col_w2 = st.columns(2)
     with col_w1:
-        w_team = st.slider("Weight: Team", min_value=0.0, max_value=1.0, value=0.25, step=0.05)
+        w_team = st.slider("Weight: Team", min_value=0.0, max_value=1.0, value=0.25, step=0.25)
     with col_w2:
-        w_opp = st.slider("Weight: Opponent", min_value=0.0, max_value=1.0, value=0.75, step=0.05)
+        w_opp = st.slider("Weight: Opponent", min_value=0.0, max_value=1.0, value=0.75, step=0.25)
 
-    st.caption("Weights only apply to **Team + Opponent**. They’ll be ignored for the other methods.")
+    # st.caption("Weights only apply to **Team + Opponent**. They’ll be ignored for the other methods.")
+    st.caption("Works best when both weights add to 1.0.")
 
     # Save / Load ratings preset
     st.subheader("Presets")
@@ -348,6 +349,27 @@ with st.sidebar:
             st.success("Preset loaded.")
         except Exception as e:
             st.error(f"Invalid preset: {e}")
+
+# ---------- Build & display ticker ----------
+gw_cols = list(range(int(gw_start), int(gw_start) + int(gw_len)))
+
+disp_df, val_df = build_ticker(
+    teams=teams_df,
+    fixtures=fixtures_df,
+    ratings=st.session_state["ratings"],
+    gw_start=int(gw_start),
+    gw_len=int(gw_len),
+    visible_team_ids=visible_ids if current else list(teams_df["team_id"]),
+    method=rating_method,
+    w_team=w_team,
+    w_opp=w_opp,
+)
+
+st.subheader("Fixture Ticker")
+st.caption("Green = easier fixtures (lower difficulty). Red = tougher fixtures (higher difficulty).")
+
+styled = style_fpl_like(disp_df, val_df).hide(axis="index")
+st.write(styled)
 
 # ---------- Ratings editor ----------
 with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expanded=False):
@@ -386,25 +408,3 @@ with st.expander("Team Visibility", expanded=False):
         # find id with that short
         row = all_teams[all_teams["short"] == short].iloc[0]
         visible_ids.append(int(row["team_id"]))
-
-# ---------- Build & display ticker ----------
-gw_cols = list(range(int(gw_start), int(gw_start) + int(gw_len)))
-
-disp_df, val_df = build_ticker(
-    teams=teams_df,
-    fixtures=fixtures_df,
-    ratings=st.session_state["ratings"],
-    gw_start=int(gw_start),
-    gw_len=int(gw_len),
-    visible_team_ids=visible_ids if current else list(teams_df["team_id"]),
-    method=rating_method,
-    w_team=w_team,
-    w_opp=w_opp,
-)
-
-st.subheader("Fixture Ticker")
-st.caption("Green = easier fixtures (lower difficulty). Red = tougher fixtures (higher difficulty).")
-
-styled = style_fpl_like(disp_df, val_df).hide(axis="index")
-st.write(styled)
-
