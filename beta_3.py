@@ -262,7 +262,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
                 level = _round_half_up(float(v))
                 level = _clamp(level, 1, 5)
                 bg = FPL_FDR_COLORS[level]
-                fg = "#000000" if level <= 3 else "#FFFFFF"
+                fg = "#000000" if (level > 1 and level <= 4) else "#FFFFFF"
                 css.at[i, col] = f"background-color:{bg}; color:{fg}; text-align:center;"
 
     styler = (
@@ -350,27 +350,6 @@ with st.sidebar:
         except Exception as e:
             st.error(f"Invalid preset: {e}")
 
-# ---------- Build & display ticker ----------
-gw_cols = list(range(int(gw_start), int(gw_start) + int(gw_len)))
-
-disp_df, val_df = build_ticker(
-    teams=teams_df,
-    fixtures=fixtures_df,
-    ratings=st.session_state["ratings"],
-    gw_start=int(gw_start),
-    gw_len=int(gw_len),
-    visible_team_ids=visible_ids if current else list(teams_df["team_id"]),
-    method=rating_method,
-    w_team=w_team,
-    w_opp=w_opp,
-)
-
-st.subheader("Fixture Ticker")
-st.caption("Green = easier fixtures (lower difficulty). Red = tougher fixtures (higher difficulty).")
-
-styled = style_fpl_like(disp_df, val_df).hide(axis="index")
-st.write(styled)
-
 # ---------- Ratings editor ----------
 with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expanded=False):
     st.write("Set how tough each **team** is to face at **home** or **away**.")
@@ -408,3 +387,24 @@ with st.expander("Team Visibility", expanded=False):
         # find id with that short
         row = all_teams[all_teams["short"] == short].iloc[0]
         visible_ids.append(int(row["team_id"]))
+
+# ---------- Build & display ticker ----------
+gw_cols = list(range(int(gw_start), int(gw_start) + int(gw_len)))
+
+disp_df, val_df = build_ticker(
+    teams=teams_df,
+    fixtures=fixtures_df,
+    ratings=st.session_state["ratings"],
+    gw_start=int(gw_start),
+    gw_len=int(gw_len),
+    visible_team_ids=visible_ids if current else list(teams_df["team_id"]),
+    method=rating_method,
+    w_team=w_team,
+    w_opp=w_opp,
+)
+
+st.subheader("Fixture Ticker")
+st.caption("Green = easier fixtures. Red = tougher fixtures.")
+
+styled = style_fpl_like(disp_df, val_df).hide(axis="index")
+st.write(styled)
