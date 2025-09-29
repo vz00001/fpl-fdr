@@ -15,6 +15,7 @@ st.set_page_config(page_title="FPL FDR (Custom Weights)", layout="wide")
 # ---------------------------
 
 
+
 @st.cache_data(ttl=3600)
 def load_fpl_data():
     """Fetch teams and fixtures from FPL API."""
@@ -40,7 +41,7 @@ def load_fpl_data():
         "event", "team_h", "team_a", "finished", "kickoff_time"
     ]].rename(columns={"team_h": "home_id", "team_a": "away_id"})
     fx_df["event"] = fx_df["event"].astype(int)
-    return teams_df, fx_df
+    return teams_df, fx_df, event_df
 
 def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int]) -> pd.Series:
     """
