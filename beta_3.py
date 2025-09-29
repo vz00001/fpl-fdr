@@ -14,6 +14,7 @@ st.set_page_config(page_title="FPL FDR (Custom Weights)", layout="wide")
 # Data loading (FPL official)
 # ---------------------------
 
+
 @st.cache_data(ttl=3600)
 def load_fpl_data():
     """Fetch teams and fixtures from FPL API."""
@@ -28,6 +29,10 @@ def load_fpl_data():
         "strength_overall_away": "str_away",
     })                               
 
+    event_df = pd.DataFrame(static["events"])[
+        ["id", "is_current", "is_next", "finished", "deadline_time"]
+    ]
+
     fixtures = requests.get(base + "fixtures/").json()
     fx_df = pd.DataFrame(fixtures)
     # keep only scheduled fixtures with a gameweek (event)
@@ -36,7 +41,6 @@ def load_fpl_data():
     ]].rename(columns={"team_h": "home_id", "team_a": "away_id"})
     fx_df["event"] = fx_df["event"].astype(int)
     return teams_df, fx_df
-
 
 def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int]) -> pd.Series:
     """
@@ -68,7 +72,22 @@ def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
         for tid, h, a in zip(teams["team_id"], home, away)
     }
 
-
+def determine_current_gw(event_df: pd.DataFrame) -> int:
+    """Find the current gameweek from event_df."""
+    current = event_df.loc[event_df["is_current"] == True, "id"]
+    if not current.empty:
+        return int(current.iloc[0])
+    else:
+        next_gw = event_df.loc[event_df["is_next"] == True, "id"]
+        if not next_gw.empty:
+            return int(next_gw.iloc[0])
+        else:
+            # Fallback: find the last finished GW
+            finished = event_df.loc[event_df["finished"] == True, "id"]
+            if not finished.empty:
+                return int(finished.max())
+            else: 
+                return 1
 # ---------------------------
 # FDR maths
 # ---------------------------
@@ -115,7 +134,6 @@ def compute_fixture_difficulty(
 
     # clip to [1, 5] just in case
     return float(np.clip(diff, 1.0, 5.0))
-
 
 def build_ticker(
     teams: pd.DataFrame,
@@ -268,31 +286,17 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
     styler = (
         disp_df.style
         .apply(lambda _: css, axis=None)
-        # .set_table_attributes('style="border-collapse:separate;border-spacing:6px 8px;width:100%;"')
-        # .set_table_styles([
-        #     {"selector": "td, th", "props": [("border", "0")]},
-        #     {"selector": "thead th.col_heading", "props": [("font-weight", "700")]}
-        # ], overwrite=False)
-        # .set_properties(subset=[c for c in disp_df.columns if c not in ("Team", "Total")],
-        #                 **{"border-radius": "12px", "padding": "6px 10px", "font-weight": "600"})
-        # .set_properties(subset=["Team", "Total"], **{"padding": "6px 6px", "font-weight": "700"})
-        .set_table_attributes(
-            'style="border-collapse:separate; border-spacing:3px 3px; width:100%;"'
-        )
-        .set_table_styles(
-            [
-                {"selector": "td, th", "props": [("font-size", "12px"), ("line-height", "1.0")]}
-            ],
-            overwrite=False
-        )
-        .set_properties(
-            subset=[c for c in disp_df.columns if c not in ("Team", "Total")],
-            **{"padding": "2px 5px", "border-radius": "8px"}
-        )        
+        .set_table_attributes('style="border-collapse:separate;border-spacing:6px 8px;width:100%;"')
+        .set_table_styles([
+            {"selector": "td, th", "props": [("border", "0")]},
+            {"selector": "thead th.col_heading", "props": [("font-weight", "700")]}
+        ], overwrite=False)
+        .set_properties(subset=[c for c in disp_df.columns if c not in ("Team", "Total")],
+                        **{"border-radius": "12px", "padding": "6px 10px", "font-weight": "600"})
+        .set_properties(subset=["Team", "Total"], **{"padding": "6px 6px", "font-weight": "700"})        
     )
 
     return styler
-
 
 
 # ---------------------------
@@ -302,7 +306,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
 st.title("FPL VZ MINHEE")
 
 with st.spinner("Loading FPL data..."):
-    teams_df, fixtures_df = load_fpl_data()
+    teams_df, fixtures_df, event_df = load_fpl_data()
 
 # Session state for ratings (persist while the app runs)
 if "ratings" not in st.session_state:
@@ -313,9 +317,11 @@ with st.sidebar:
     st.header("Tuning")
 
     # Gameweek range
+    current_gw = determine_current_gw(event_df)
     min_gw = int(fixtures_df["event"].min())
     max_gw = int(fixtures_df["event"].max())
-    gw_start = st.number_input("First Gameweek", min_value=min_gw, max_value=max_gw, value=min(6, max_gw), step=1)
+    gw_start_default = clamp(current_gw, min_gw, max_gw)
+    gw_start = st.number_input("First Gameweek", min_value=min_gw, max_value=max_gw, value=gw_start_default, step=1)
     gw_len = st.number_input("Number of gameweeks", min_value=1, max_value=max_gw - gw_start + 1, value=5, step=1)
 
     rating_method = st.selectbox(

@@ -8,28 +8,35 @@ import requests
 import streamlit as st
 
 
-st.set_page_config(page_title="FPL FDR (Custom Weights)", layout="wide")
+# st.set_page_config(page_title="FPL FDR (Custom Weights)", layout="wide")
 
-@st.cache_data(ttl=3600)
-def load_data():
-    base_url = "https://fantasy.premierleague.com/api/"
-    static = requests.get(base_url + "bootstrap-static/").json()
+# @st.cache_data(ttl=3600)
+def load_fpl_data():
+    """Fetch teams and fixtures from FPL API."""
+    base = "https://fantasy.premierleague.com/api/"
+    static = requests.get(base + "bootstrap-static/").json()
     teams_df = pd.DataFrame(static["teams"])[
         ["id", "name", "short_name", "strength_overall_home", "strength_overall_away"]
     ].rename(columns={
         "id": "team_id",
         "short_name": "short",
         "strength_overall_home": "str_home",
-        "strength_overall_away": "str_away"
-    })
+        "strength_overall_away": "str_away",
+    })                               
 
-    fixtures = requests.get(base_url + "fixtures/").json()
+    event_df = pd.DataFrame(static["events"])[
+        ["id", "is_current", "is_next", "finished", "deadline_time"]
+    ] 
+
+    fixtures = requests.get(base + "fixtures/").json()
     fx_df = pd.DataFrame(fixtures)
+    # keep only scheduled fixtures with a gameweek (event)
     fx_df = fx_df.loc[fx_df["event"].notna(), [
         "event", "team_h", "team_a", "finished", "kickoff_time"
     ]].rename(columns={"team_h": "home_id", "team_a": "away_id"})
     fx_df["event"] = fx_df["event"].astype(int)
-    return teams_df, fx_df
+
+    return teams_df, fx_df, event_df
 
 def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int]) -> pd.Series:
     """
@@ -60,6 +67,23 @@ def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
         int(tid): {"home": int(h), "away": int(a)}
         for tid, h, a in zip(teams["team_id"], home, away)
     }
+
+def determine_current_gw(event_df: pd.DataFrame) -> int:
+    """Find the current gameweek from event_df."""
+    current = event_df.loc[event_df["is_current"] == True, "id"]
+    if not current.empty:
+        return int(current.iloc[0])
+    else:
+        next_gw = event_df.loc[event_df["is_next"] == True, "id"]
+        if not next_gw.empty:
+            return int(next_gw.iloc[0])
+        else:
+            # Fallback: find the last finished GW
+            finished = event_df.loc[event_df["finished"] == True, "id"]
+            if not finished.empty:
+                return int(finished.max())
+            else: 
+                return 1
 
 # -----------
 def compute_fixture_difficulty(
@@ -233,14 +257,9 @@ def build_ticker(
     return disp_df, val_df
 
 
-teams_df, fixtures_df = load_data()
+teams_df, fixtures_df, event_df = load_fpl_data()
 print(fixtures_df)
 print(teams_df)
-print(default_ratings_fixed(teams_df))
+print(event_df)
 
-r = default_ratings_fixed(teams_df)
-audit = pd.DataFrame([
-    {"team": n, "home": r[i]["home"], "away": r[i]["away"], "str_home": H, "str_away": A}
-    for i,n,H,A in zip(teams_df.team_id, teams_df.name, teams_df.str_away, teams_df.str_home)
-]).sort_values(["team"])
-print(audit.to_string(index=False))
+print(determine_current_gw(event_df))
