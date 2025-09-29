@@ -321,7 +321,7 @@ with st.sidebar:
     current_gw = determine_current_gw(event_df)
     min_gw = int(fixtures_df["event"].min())
     max_gw = int(fixtures_df["event"].max())
-    gw_start_default = clamp(current_gw, min_gw, max_gw)
+    gw_start_default = _clamp(current_gw, min_gw, max_gw)
     gw_start = st.number_input("First Gameweek", min_value=min_gw, max_value=max_gw, value=gw_start_default, step=1)
     gw_len = st.number_input("Number of gameweeks", min_value=1, max_value=max_gw - gw_start + 1, value=5, step=1)
 
