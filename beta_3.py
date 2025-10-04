@@ -486,9 +486,9 @@ st.write(styled)
 st.subheader("Premier League Table")
 
 # Optional controls
-colA, colB = st.columns([1,1])
-with colA:
-    show_form = st.toggle("Show form (last 5)", value=True)
+# colA, colB = st.columns([1,1])
+# with colA:
+#     show_form = st.toggle("Show form (last 5)", value=True)
 
 # Build table from finished fixtures
 with st.spinner("Building live table from finished fixtures..."):
@@ -496,9 +496,8 @@ with st.spinner("Building live table from finished fixtures..."):
 
 # Columns to display
 display_cols = ["Pos", "Team", "P", "W", "D", "L", "GF", "GA", "GD", "Pts"]
-if show_form and "Form" in table_df.columns:
-    display_cols.append("Form")
-
+# if show_form and "Form" in table_df.columns:
+#     display_cols.append("Form")
 table_disp = table_df[display_cols].copy()
 
 # Styling: sticky header + numeric alignment + soft banding by position
