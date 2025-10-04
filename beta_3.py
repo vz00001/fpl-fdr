@@ -518,9 +518,9 @@ else:
     """, unsafe_allow_html=True)
 
     def _pos_band(pos: int) -> str:
-        if pos <= 4:      return "#f3fbf6"   # top 4
-        if 5 <= pos <= 6: return "#f6f9ff"   # euro spots
-        if pos >= 18:     return "#fff6f6"   # relegation
+        if pos <= 4:      return "#34a853"   # top 4
+        if 5 <= pos <= 7: return "#E7E7E7"   # euro spots
+        if pos >= 18:     return "#80072d"   # relegation
         return "#ffffff"
 
     bg_colors = table_disp["Pos"].apply(_pos_band)
