@@ -496,7 +496,7 @@ if missing:
 else:
     # Sort by PL tiebreakers: Pts desc, GD desc, GF desc, then Team asc
     table_df = table_df.sort_values(
-        by=["Pts", "GD", "GF", "Team"],
+        by=["Pts", "GD", "GF", "GA", "Team"],
         ascending=[False, False, False, True],
         kind="mergesort",
         ignore_index=True,
@@ -520,23 +520,28 @@ else:
     def _pos_band(pos: int) -> str:
         if pos <= 4:      return "#34a853"   # top 4
         if 5 <= pos <= 7: return "#E7E7E7"   # euro spots
-        if pos >= 18:     return "#80072d"   # relegation
+        if pos >= 18:     return "#E60023"   # relegation
         return "#ffffff"
 
-    bg_colors = table_disp["Pos"].apply(_pos_band)
-    styler = (
-        table_disp.style
-        .hide(axis="index")
-        .set_table_styles([
-            {"selector": "th", "props": [("text-align", "left")]},
-            {"selector": "td", "props": [("padding", "6px 8px")]}
-        ])
-        .set_properties(subset=["Pts"], **{"font-weight": "700"})
-    )
-    for i, color in enumerate(bg_colors):
-        styler = styler.set_properties(subset=pd.IndexSlice[i, :], **{"background-color": color})
+# Build a style frame the same shape as table_disp, but only color the "Pos" column
+def _style_pos_only(df: pd.DataFrame) -> pd.DataFrame:
+    styles = pd.DataFrame("", index=df.index, columns=df.columns)
+    for i, pos in enumerate(df["Pos"]):
+        styles.at[i, "Pos"] = f"background-color: {_pos_band(int(pos))}; font-weight:700;"
+    return styles
 
-    st.write(styler, unsafe_allow_html=True)
+styler = (
+    table_disp.style
+    .hide(axis="index")
+    .set_table_styles([
+        {"selector": "th", "props": [("text-align", "left")]},
+        {"selector": "td", "props": [("padding", "6px 8px")]}
+    ])
+    .set_properties(subset=["Pts"], **{"font-weight": "700"})
+    .apply(_style_pos_only, axis=None)   # <-- only the Pos column gets background color
+)
+
+st.write(styler, unsafe_allow_html=True)
 
 # --- Footer / meta ---
 tz = "Asia/Ho_Chi_Minh"
