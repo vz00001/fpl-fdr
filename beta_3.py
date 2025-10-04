@@ -360,7 +360,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
 st.title("FPL VZ MINHEE")
 
 with st.spinner("Loading FPL data..."):
-    teams_df, fixtures_df, event_df = load_fpl_data()
+    teams_df, fixtures_df, event_df, fetched_at = load_fpl_data()
 
 # Session state for ratings (persist while the app runs)
 if "ratings" not in st.session_state:
