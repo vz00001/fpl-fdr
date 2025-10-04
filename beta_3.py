@@ -519,7 +519,7 @@ else:
 
     def _pos_band(pos: int) -> str:
         if pos <= 4:      return "#34a853"   # top 4
-        if 5 <= pos <= 7: return "#E7E7E7"   # euro spots
+        if 5 <= pos <= 5: return "#0048FF"   # euro spots
         if pos >= 18:     return "#E60023"   # relegation
         return "#ffffff"
 
