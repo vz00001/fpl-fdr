@@ -483,12 +483,75 @@ styled = style_fpl_like(disp_df, val_df).hide(axis="index")
 st.write(styled)
 
 # ---------- Display league table ----------
-st.subheader("Current League Table")
+st.subheader("Premier League Table")
+
+# Optional controls
+colA, colB = st.columns([1,1])
+with colA:
+    show_form = st.toggle("Show form (last 5)", value=True)
+
+# Build table from finished fixtures
+with st.spinner("Building live table from finished fixtures..."):
+    table_df = build_pl_table(teams_df, fixtures_df)  # you provide this
+
+# Columns to display
+display_cols = ["Pos", "Team", "P", "W", "D", "L", "GF", "GA", "GD", "Pts"]
+if show_form and "Form" in table_df.columns:
+    display_cols.append("Form")
+
+table_disp = table_df[display_cols].copy()
+
+# Styling: sticky header + numeric alignment + soft banding by position
+st.markdown("""
+<style>
+thead tr th { position: sticky; top: 0; background: white; z-index: 1; }
+td, th { font-variant-numeric: tabular-nums; }
+</style>
+""", unsafe_allow_html=True)
+
+def _pos_band(pos: int) -> str:
+    if pos <= 4:   return "#f3fbf6"  # top 4
+    if 5 <= pos <= 6: return "#f6f9ff"  # euro spots
+    if pos >= 18:  return "#fff6f6"  # relegation
+    return "#ffffff"
+
+# Apply row-wise background banding
+bg_colors = table_disp["Pos"].apply(_pos_band)
+styler = (
+    table_disp.style
+    .hide(axis="index")
+    .set_table_styles([
+        {"selector": "th", "props": [("text-align", "left")]},
+        {"selector": "td", "props": [("padding", "6px 8px")]}
+    ])
+    .set_properties(subset=["Pts"], **{"font-weight": "700"})
+)
+
+# Paint row backgrounds
+for i, color in enumerate(bg_colors):
+    styler = styler.set_properties(subset=pd.IndexSlice[i, :], **{"background-color": color})
+
+st.write(styler, unsafe_allow_html=True)
+
 # --- Footer / meta ---
 tz = "Asia/Ho_Chi_Minh"
+bits = []
+
+# fetched_at from loader
 if fetched_at is not None:
     try:
         local = pd.to_datetime(fetched_at, utc=True).tz_convert(tz)
-        st.caption(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} • Source: FPL fixtures (finished matches only)")
+        bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')}")
     except Exception:
-        st.caption("Source: FPL fixtures (finished matches only)")
+        pass
+
+# # meta from table builder (optional keys)
+# if isinstance(meta, dict):
+#     if "finished_matches" in meta:
+#         bits.append(f"{meta['finished_matches']} finished matches")
+#     if "last_event_id" in meta:
+#         bits.append(f"up to GW {meta['last_event_id']}")
+
+src = "Source: FPL fixtures (finished matches only)"
+tail = " • ".join(bits) + (" • " if bits else "")
+st.caption(f"{tail}{src}")
