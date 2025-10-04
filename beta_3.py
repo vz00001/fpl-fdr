@@ -494,10 +494,10 @@ missing = required - set(table_df.columns)
 if missing:
     st.error(f"Table is missing columns: {sorted(missing)}")
 else:
-    # Sort by PL tiebreakers: Pts desc, GD desc, GF desc, then Team asc
+    # Sort by PL tiebreakers: Pts desc, GD desc, GF desc, GA asc, then Team asc
     table_df = table_df.sort_values(
         by=["Pts", "GD", "GF", "GA", "Team"],
-        ascending=[False, False, False, True],
+        ascending=[False, False, False, True, True],
         kind="mergesort",
         ignore_index=True,
     )
