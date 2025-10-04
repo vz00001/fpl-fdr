@@ -38,10 +38,13 @@ def load_fpl_data():
     fx_df = pd.DataFrame(fixtures)
     # keep only scheduled fixtures with a gameweek (event)
     fx_df = fx_df.loc[fx_df["event"].notna(), [
-        "event", "team_h", "team_a", "finished", "kickoff_time"
+        "event", "team_h", "team_a", "finished", "kickoff_time", "team_h_score", "team_a_score"
     ]].rename(columns={"team_h": "home_id", "team_a": "away_id"})
     fx_df["event"] = fx_df["event"].astype(int)
-    return teams_df, fx_df, event_df
+
+    fetched_at = pd.Timestamp.now(tz="UTC")
+
+    return teams_df, fx_df, event_df, fetched_at
 
 def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int]) -> pd.Series:
     """
@@ -89,6 +92,56 @@ def determine_current_gw(event_df: pd.DataFrame) -> int:
                 return int(finished.max())
             else: 
                 return 1
+
+def build_pl_table(teams_df: pd.DataFrame, fixtures_df: pd.DataFrame) -> pd.DataFrame:
+    """Build a simple league table from teams and fixtures data."""
+    # Initialize table with team names
+    table = teams_df[["team_id", "short"]].rename(columns={"short": "Team"}).set_index("team_id")
+    table["P"] = 0  # Played
+    table["W"] = 0  # Wins
+    table["D"] = 0  # Draws
+    table["L"] = 0  # Losses
+    table["GF"] = 0  # Goals For
+    table["GA"] = 0  # Goals Against
+    table["GD"] = 0 # Goal Difference
+    table["Pts"] = 0# Points
+
+    # Process each finished fixture
+    finished_fixtures = fixtures_df[fixtures_df["finished"] == True]
+    for _, match in finished_fixtures.iterrows():
+        home_id = match["home_id"]
+        away_id = match["away_id"]
+        home_goals = match.get("team_h_score", 0)
+        away_goals = match.get("team_a_score", 0)
+
+        # Update played games
+        table.at[home_id, "P"] += 1
+        table.at[away_id, "P"] += 1
+
+        # Update goals for and against
+        table.at[home_id, "GF"] += home_goals
+        table.at[home_id, "GA"] += away_goals
+        table.at[away_id, "GF"] += away_goals
+        table.at[away_id, "GA"] += home_goals
+
+        # Update wins, draws, losses and points
+        if home_goals > away_goals:
+            table.at[home_id, "W"] += 1
+            table.at[away_id, "L"] += 1
+            table.at[home_id, "Pts"] += 3
+        elif home_goals < away_goals:
+            table.at[away_id, "W"] += 1
+            table.at[home_id, "L"] += 1
+            table.at[away_id, "Pts"] += 3
+        else:
+            table.at[home_id, "D"] += 1
+            table.at[away_id, "D"] += 1
+            table.at[home_id, "Pts"] += 1
+            table.at[away_id, "Pts"] += 1
+     
+    # Calculate goal difference
+    table["GD"] = table["GF"] - table["GA"] 
+    return table.reset_index()
 # ---------------------------
 # FDR maths
 # ---------------------------
@@ -428,3 +481,14 @@ st.subheader("Fixture Ticker")
 st.caption("Green = easier fixtures. Red = tougher fixtures.")
 styled = style_fpl_like(disp_df, val_df).hide(axis="index")
 st.write(styled)
+
+# ---------- Display league table ----------
+st.subheader("Current League Table")
+# --- Footer / meta ---
+tz = "Asia/Ho_Chi_Minh"
+if fetched_at is not None:
+    try:
+        local = pd.to_datetime(fetched_at, utc=True).tz_convert(tz)
+        st.caption(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} • Source: FPL fixtures (finished matches only)")
+    except Exception:
+        st.caption("Source: FPL fixtures (finished matches only)")

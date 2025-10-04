@@ -60,6 +60,57 @@ def ratings(teams_df):
         3: {"home": 2, "away": 2},  # weaker
     }
 
+def _df(rows):
+    # rows = [id, is_current, is_next, finished]
+    return pd.DataFrame(rows, columns=["id", "is_current", "is_next", "finished"])
+
+@pytest.mark.parametrize(
+    "events,expected",
+    [
+        # prefers current
+        (_df([
+            [1, False, False, True],
+            [2, True,  False, False],
+            [3, False, True,  False],
+        ]), 2),
+
+        # uses next when no current
+        (_df([
+            [1, False, False, True],
+            [2, False, True,  False],
+            [3, False, False, False],
+        ]), 2),
+
+        # falls back to last finished
+        (_df([
+            [1, False, False, True],
+            [2, False, False, True],
+            [3, False, False, False],
+        ]), 2),
+
+        # nothing marked -> 1
+        (_df([
+            [1, False, False, False],
+            [2, False, False, False],
+        ]), 1),
+
+        # multiple current rows -> first one
+        (_df([
+            [3, True,  False, False],
+            [4, True,  False, False],
+        ]), 3),
+    ],
+    ids=[
+        "prefers_current",
+        "uses_next",
+        "fallback_last_finished",
+        "default_one",
+        "multiple_current_first",
+    ]
+)
+def test_determine_current_gw_all_cases(events, expected):
+    assert app.determine_current_gw(events) == expected
+
 
 # ---------------------------
 # Unit tests: strength mapping
@@ -221,7 +272,12 @@ def test_load_fpl_data_mocks_requests(monkeypatch):
                      "strength_overall_home": 1300, "strength_overall_away": 1280},
                     {"id": 2, "name": "Bravo", "short_name": "BRA",
                      "strength_overall_home": 1200, "strength_overall_away": 1180},
-                ]
+                ],
+                "events": [
+                    {"id": 5, "finished": True, "is_current": False, "is_next": False, "deadline_time": "2025-08-25T12:00:00Z"},
+                    {"id": 6, "finished": False, "is_current": True, "is_next": False, "deadline_time": "2025-09-01T12:00:00Z"},
+                    {"id": 7, "finished": False, "is_current": False, "is_next": True, "deadline_time": "2025-09-08T12:00:00Z"}
+                ],
             })
         if url == base + "fixtures/":
             return _Resp([
@@ -236,7 +292,7 @@ def test_load_fpl_data_mocks_requests(monkeypatch):
 
     # Call the undecorated function as an extra guard (ok if already cleared)
     fn = getattr(app.load_fpl_data, "__wrapped__", app.load_fpl_data)
-    teams_df, fx_df = fn()
+    teams_df, fx_df, events_df = fn()
 
     # Assert our mock was actually called
     assert any("bootstrap-static" in u for u in calls)
@@ -246,3 +302,4 @@ def test_load_fpl_data_mocks_requests(monkeypatch):
     assert {"team_id", "short", "str_home", "str_away"}.issubset(teams_df.columns)
     assert {"event", "home_id", "away_id"}.issubset(fx_df.columns)
     assert fx_df["event"].min() == 6  # None filtered out
+    assert {"id", "finished", }.issubset(events_df.columns)
