@@ -6,6 +6,9 @@ import streamlit as st
 from pandas.io.formats.style import Styler  # for type hints only
 
 import fpl_core as core  # <- our logic module
+from importlib import reload
+core = reload(core)
+
 
 st.set_page_config(page_title="FPL ZINHEV - Fixture Difficulty Rating", layout="wide")
 

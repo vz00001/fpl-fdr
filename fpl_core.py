@@ -55,14 +55,12 @@ def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
     return {int(tid): {"home": int(h), "away": int(a)}
             for tid, h, a in zip(teams["team_id"], home, away)}
 
-def table_ratings_fixed(table: pd.DataFrame, team: pd.DataFrame) -> Dict[int, Dict[str, int]]:
+def table_ratings_fixed(table: pd.DataFrame, teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
     cuts = (0, 5, 10, 15)
     # NOTE: mirrors your current mapping (home <- str_away, away <- str_home)
     home = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
     away = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
-    # return {int(tid): {"home": int(h), "away": int(a)}
-    #         for tid, h, a in zip(table["team_id"], home, away)}
-    short2id = {r["short"]: int(r["team_id"]) for _, r in team.iterrows()}
+    short2id = {r["short"]: int(r["team_id"]) for _, r in teams.iterrows()}
     return {short2id[team_short]: {"home": 6 - int(h) + 1, "away": 6 - int(a)}
             for team_short, h, a in zip(table["Team"], home, away)}
 
