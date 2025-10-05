@@ -305,7 +305,22 @@ def build_pl_table(teams_df: pd.DataFrame, fixtures_df: pd.DataFrame) -> pd.Data
             table.at[away_id, "Pts"] += 1
      
     # Calculate goal difference
-    table["GD"] = table["GF"] - table["GA"] 
+    table["GD"] = table["GF"] - table["GA"]     
+    # Validate required columns from your builder
+    required = {"Team","P","W","D","L","GF","GA","GD","Pts"}
+    missing = required - set(table.columns)
+    if missing:
+        st.error(f"Table is missing columns: {sorted(missing)}")
+    else:
+        # Sort by PL tiebreakers: Pts desc, GD desc, GF desc, GA asc, then Team asc
+        table = table.sort_values(
+            by=["Pts", "GD", "GF", "Team"],
+            ascending=[False, False, False, True],
+            kind="mergesort",
+            ignore_index=True,
+        )
+    # Add position column
+    table.insert(0, "Pos", range(1, len(table) + 1)) 
     return table.reset_index()
 
 

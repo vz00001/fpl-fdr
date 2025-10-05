@@ -140,7 +140,22 @@ def build_pl_table(teams_df: pd.DataFrame, fixtures_df: pd.DataFrame) -> pd.Data
             table.at[away_id, "Pts"] += 1
      
     # Calculate goal difference
-    table["GD"] = table["GF"] - table["GA"] 
+    table["GD"] = table["GF"] - table["GA"]     
+    # Validate required columns from your builder
+    required = {"Team","P","W","D","L","GF","GA","GD","Pts"}
+    missing = required - set(table.columns)
+    if missing:
+        st.error(f"Table is missing columns: {sorted(missing)}")
+    else:
+        # Sort by PL tiebreakers: Pts desc, GD desc, GF desc, GA asc, then Team asc
+        table = table.sort_values(
+            by=["Pts", "GD", "GF", "Team"],
+            ascending=[False, False, False, True],
+            kind="mergesort",
+            ignore_index=True,
+        )
+    # Add position column
+    table.insert(0, "Pos", range(1, len(table) + 1)) 
     return table.reset_index()
 # ---------------------------
 # FDR maths
@@ -488,22 +503,22 @@ st.subheader("Premier League Table")
 with st.spinner("Building table from finished fixtures..."):
     table_df = build_pl_table(teams_df, fixtures_df)
 
-# Validate required columns from your builder
-required = {"Team","P","W","D","L","GF","GA","GD","Pts"}
-missing = required - set(table_df.columns)
-if missing:
-    st.error(f"Table is missing columns: {sorted(missing)}")
-else:
-    # Sort by PL tiebreakers: Pts desc, GD desc, GF desc, GA asc, then Team asc
-    table_df = table_df.sort_values(
-        by=["Pts", "GD", "GF", "GA", "Team"],
-        ascending=[False, False, False, True, True],
-        kind="mergesort",
-        ignore_index=True,
-    )
+# # Validate required columns from your builder
+# required = {"Team","P","W","D","L","GF","GA","GD","Pts"}
+# missing = required - set(table_df.columns)
+# if missing:
+#     st.error(f"Table is missing columns: {sorted(missing)}")
+# else:
+#     # Sort by PL tiebreakers: Pts desc, GD desc, GF desc, GA asc, then Team asc
+#     table_df = table_df.sort_values(
+#         by=["Pts", "GD", "GF", "Team"],
+#         ascending=[False, False, False, True],
+#         kind="mergesort",
+#         ignore_index=True,
+#     )
 
-    # Add Pos (1..N) for display
-    table_df.insert(0, "Pos", range(1, len(table_df) + 1))
+#     # Add Pos (1..N) for display
+#     table_df.insert(0, "Pos", range(1, len(table_df) + 1))
 
     # Final columns to display
     display_cols = ["Pos","Team","P","W","D","L","GF","GA","GD","Pts"]
@@ -549,7 +564,7 @@ bits = []
 if fetched_at is not None:
     try:
         local = pd.to_datetime(fetched_at, utc=True).tz_convert(tz)
-        bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')}")
+        bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} My Tho time")
     except Exception:
         pass
 src = "Source: FPL fixtures (finished matches only)"
