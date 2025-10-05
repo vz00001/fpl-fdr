@@ -117,17 +117,17 @@ with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expand
                         value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
 
 # ---------- Team visibility ----------
-# with st.expander("Team Visibility", expanded=False):
-#     all_teams = teams_df.sort_values("name")
-#     team_options = [f'{r["name"]} ({r["short"]})' for _, r in all_teams.iterrows()]
-#     default_sel = team_options
-#     current = st.multiselect("Show teams in ticker:", team_options, default=default_sel)
-#     visible_ids = []
-#     for opt in current:
-#         short = opt.split("(")[-1].strip(")")
-#         short = short[:-1] if short.endswith(")") else short
-#         row = all_teams[all_teams["short"] == short].iloc[0]
-#         visible_ids.append(int(row["team_id"]))
+with st.sidebar("Team Visibility", expanded=False):
+    all_teams = teams_df.sort_values("name")
+    team_options = [f'{r["name"]} ({r["short"]})' for _, r in all_teams.iterrows()]
+    default_sel = team_options
+    current = st.multiselect("Show teams in ticker:", team_options, default=default_sel)
+    visible_ids = []
+    for opt in current:
+        short = opt.split("(")[-1].strip(")")
+        short = short[:-1] if short.endswith(")") else short
+        row = all_teams[all_teams["short"] == short].iloc[0]
+        visible_ids.append(int(row["team_id"]))
 
 # ---------- Build & display ticker ----------
 disp_df, val_df = core.build_ticker(
