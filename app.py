@@ -111,30 +111,29 @@ with st.sidebar:
         default=id_options,           # all selected by default
         format_func=_fmt_team,
     )
-
     # safety: if user deselects everything, fallback to all
     if not visible_ids:
         visible_ids = id_options
 
-# ---------- Ratings editor ----------
-with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expanded=False):
-    st.write("Set how tough each team is to face at home or away.")
-    left, right = st.columns(2)
-    split = math.ceil(len(teams_df) / 2)
-    for col, subdf in zip((left, right), (teams_df.iloc[:split], teams_df.iloc[split:])):
-        with col:
-            for _, row in subdf.sort_values("name").iterrows():
-                tid, name = int(row["team_id"]), row["name"]
-                cols = st.columns([2, 1, 1])
-                with cols[0]: st.write(f"**{name}**")
-                with cols[1]:
-                    st.session_state["ratings"][tid]["home"] = st.number_input(
-                        f"Home {name}", key=f"r{tid}h", min_value=1, max_value=5,
-                        value=int(st.session_state["ratings"][tid]["home"]), step=1, label_visibility="collapsed")
-                with cols[2]:
-                    st.session_state["ratings"][tid]["away"] = st.number_input(
-                        f"Away {name}", key=f"r{tid}a", min_value=1, max_value=5,
-                        value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
+# # ---------- Ratings editor ----------
+# with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expanded=False):
+#     st.write("Set how tough each team is to face at home or away.")
+#     left, right = st.columns(2)
+#     split = math.ceil(len(teams_df) / 2)
+#     for col, subdf in zip((left, right), (teams_df.iloc[:split], teams_df.iloc[split:])):
+#         with col:
+#             for _, row in subdf.sort_values("name").iterrows():
+#                 tid, name = int(row["team_id"]), row["name"]
+#                 cols = st.columns([2, 1, 1])
+#                 with cols[0]: st.write(f"**{name}**")
+#                 with cols[1]:
+#                     st.session_state["ratings"][tid]["home"] = st.number_input(
+#                         f"Home {name}", key=f"r{tid}h", min_value=1, max_value=5,
+#                         value=int(st.session_state["ratings"][tid]["home"]), step=1, label_visibility="collapsed")
+#                 with cols[2]:
+#                     st.session_state["ratings"][tid]["away"] = st.number_input(
+#                         f"Away {name}", key=f"r{tid}a", min_value=1, max_value=5,
+#                         value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
 
 # ---------- Team visibility ----------
 # with st.expander("Team Visibility", expanded=False):
@@ -151,10 +150,15 @@ with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expand
 
 # ---------- Build & display ticker ----------
 disp_df, val_df = core.build_ticker(
-    teams=teams_df, fixtures=fixtures_df, ratings=st.session_state["ratings"],
-    gw_start=int(gw_start), gw_len=int(gw_len),
+    teams=teams_df, 
+    fixtures=fixtures_df, 
+    ratings=st.session_state["ratings"],
+    gw_start=int(gw_start), 
+    gw_len=int(gw_len),
     visible_team_ids=visible_ids,
-    method=rating_method, w_team=w_team, w_opp=w_opp,
+    method=rating_method, 
+    w_team=w_team, 
+    w_opp=w_opp,
 )
 
 st.subheader("Fixture Ticker")
@@ -200,6 +204,27 @@ styler = (
     .apply(_style_pos_only, axis=None)
 )
 st.write(styler, unsafe_allow_html=True)
+
+# ---------- Ratings editor ----------
+st.divider()
+with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expanded=False):
+    st.write("Set how tough each team is to face at home or away.")
+    left, right = st.columns(2)
+    split = math.ceil(len(teams_df) / 2)
+    for col, subdf in zip((left, right), (teams_df.iloc[:split], teams_df.iloc[split:])):
+        with col:
+            for _, row in subdf.sort_values("name").iterrows():
+                tid, name = int(row["team_id"]), row["name"]
+                cols = st.columns([2, 1, 1])
+                with cols[0]: st.write(f"**{name}**")
+                with cols[1]:
+                    st.session_state["ratings"][tid]["home"] = st.number_input(
+                        f"Home {name}", key=f"r{tid}h", min_value=1, max_value=5,
+                        value=int(st.session_state["ratings"][tid]["home"]), step=1, label_visibility="collapsed")
+                with cols[2]:
+                    st.session_state["ratings"][tid]["away"] = st.number_input(
+                        f"Away {name}", key=f"r{tid}a", min_value=1, max_value=5,
+                        value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
 
 # --- Footer / meta ---
 tz = "Asia/Ho_Chi_Minh"
