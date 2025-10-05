@@ -54,6 +54,7 @@ st.title("FPL ZINHEV - Fixture Difficulty Rating")
 
 with st.spinner("Loading FPL data..."):
     teams_df, fixtures_df, event_df, fetched_at = load_fpl_data()
+    table_df = core.build_pl_table(teams_df, fixtures_df)
 
 # Session state for ratings
 if "ratings" not in st.session_state:
@@ -116,17 +117,17 @@ with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expand
                         value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
 
 # ---------- Team visibility ----------
-with st.expander("Team Visibility", expanded=False):
-    all_teams = teams_df.sort_values("name")
-    team_options = [f'{r["name"]} ({r["short"]})' for _, r in all_teams.iterrows()]
-    default_sel = team_options
-    current = st.multiselect("Show teams in ticker:", team_options, default=default_sel)
-    visible_ids = []
-    for opt in current:
-        short = opt.split("(")[-1].strip(")")
-        short = short[:-1] if short.endswith(")") else short
-        row = all_teams[all_teams["short"] == short].iloc[0]
-        visible_ids.append(int(row["team_id"]))
+# with st.expander("Team Visibility", expanded=False):
+#     all_teams = teams_df.sort_values("name")
+#     team_options = [f'{r["name"]} ({r["short"]})' for _, r in all_teams.iterrows()]
+#     default_sel = team_options
+#     current = st.multiselect("Show teams in ticker:", team_options, default=default_sel)
+#     visible_ids = []
+#     for opt in current:
+#         short = opt.split("(")[-1].strip(")")
+#         short = short[:-1] if short.endswith(")") else short
+#         row = all_teams[all_teams["short"] == short].iloc[0]
+#         visible_ids.append(int(row["team_id"]))
 
 # ---------- Build & display ticker ----------
 disp_df, val_df = core.build_ticker(
@@ -143,8 +144,8 @@ st.write(styled)
 
 # ---------- Display league table ----------
 st.subheader("Premier League Table")
-with st.spinner("Building table from finished fixtures..."):
-    table_df = core.build_pl_table(teams_df, fixtures_df)
+# with st.spinner("Building table from finished fixtures..."):
+#     table_df = core.build_pl_table(teams_df, fixtures_df)
 
 display_cols = ["Pos","Team","P","W","D","L","GF","GA","GD","Pts"]
 table_disp = table_df[display_cols].copy()
@@ -189,6 +190,6 @@ if fetched_at is not None:
         bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} My Tho time")
     except Exception:
         pass
-src = "Source: FPL fixtures (finished matches only)"
+src = "Source: FPL fixtures (finished matches only). ^0.4.2"
 tail = " • ".join(bits) + (" • " if bits else "")
 st.caption(f"{tail}{src}")
