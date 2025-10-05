@@ -117,7 +117,7 @@ with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expand
                         value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
 
 # ---------- Team visibility ----------
-with st.sidebar("Team Visibility", expanded=False):
+with st.expander("Team Visibility", expanded=False):
     all_teams = teams_df.sort_values("name")
     team_options = [f'{r["name"]} ({r["short"]})' for _, r in all_teams.iterrows()]
     default_sel = team_options
