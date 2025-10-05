@@ -372,7 +372,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
 # App
 # ---------------------------
 
-st.title("FPL VZ MINHEE")
+st.title("FPL ZINHEV - Fixture Difficulty Rating")
 
 with st.spinner("Loading FPL data..."):
     teams_df, fixtures_df, event_df, fetched_at = load_fpl_data()
@@ -502,23 +502,6 @@ st.subheader("Premier League Table")
 
 with st.spinner("Building table from finished fixtures..."):
     table_df = build_pl_table(teams_df, fixtures_df)
-
-# # Validate required columns from your builder
-# required = {"Team","P","W","D","L","GF","GA","GD","Pts"}
-# missing = required - set(table_df.columns)
-# if missing:
-#     st.error(f"Table is missing columns: {sorted(missing)}")
-# else:
-#     # Sort by PL tiebreakers: Pts desc, GD desc, GF desc, GA asc, then Team asc
-#     table_df = table_df.sort_values(
-#         by=["Pts", "GD", "GF", "Team"],
-#         ascending=[False, False, False, True],
-#         kind="mergesort",
-#         ignore_index=True,
-#     )
-
-#     # Add Pos (1..N) for display
-#     table_df.insert(0, "Pos", range(1, len(table_df) + 1))
 
     # Final columns to display
     display_cols = ["Pos","Team","P","W","D","L","GF","GA","GD","Pts"]

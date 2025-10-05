@@ -1,330 +1,194 @@
-import json
-import math
-from typing import Dict, Tuple, List
-
+# app.py
+import json, math
 import numpy as np
 import pandas as pd
-import requests
 import streamlit as st
+from pandas.io.formats.style import Styler  # for type hints only
 
+import fpl_core as core  # <- our logic module
 
-# st.set_page_config(page_title="FPL FDR (Custom Weights)", layout="wide")
+st.set_page_config(page_title="FPL ZINHEV - Fixture Difficulty Rating", layout="wide")
 
-# @st.cache_data(ttl=3600)
+# ------------- cached wrappers around core.fetch -------------
+@st.cache_data(ttl=3600)
 def load_fpl_data():
-    """Fetch teams and fixtures from FPL API."""
-    base = "https://fantasy.premierleague.com/api/"
-    static = requests.get(base + "bootstrap-static/").json()
-    teams_df = pd.DataFrame(static["teams"])[
-        ["id", "name", "short_name", "strength_overall_home", "strength_overall_away"]
-    ].rename(columns={
-        "id": "team_id",
-        "short_name": "short",
-        "strength_overall_home": "str_home",
-        "strength_overall_away": "str_away",
-    })                               
+    return core.fetch_fpl_data()
 
-    event_df = pd.DataFrame(static["events"])[
-        ["id", "is_current", "is_next", "finished", "deadline_time"]
-    ] 
+# ------------- UI-only helpers (styling etc.) -------------
+FPL_FDR_COLORS = {
+    1: "#34a853", 2: "#01FC7A", 3: "#E7E7E7", 4: "#E60023", 5: "#80072d",
+}
 
-    fixtures = requests.get(base + "fixtures/").json()
-    fx_df = pd.DataFrame(fixtures)
-    # keep only scheduled fixtures with a gameweek (event)
-    fx_df = fx_df.loc[fx_df["event"].notna(), [
-        "event", "team_h", "team_a", "finished", "kickoff_time", "team_h_score", "team_a_score"
-    ]].rename(columns={"team_h": "home_id", "team_a": "away_id"})
-    fx_df["event"] = fx_df["event"].astype(int)
+def _round_half_up(x: float) -> int:
+    return int(np.floor(x + 0.5))
 
-    fetched_at = pd.Timestamp.now(tz="UTC")
+def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
+    css = pd.DataFrame("", index=disp_df.index, columns=disp_df.columns)
+    for i in disp_df.index:
+        for col in disp_df.columns:
+            if col in ("Team","Total"):
+                css.at[i, col] = "font-weight:700; background-color:#ffffff; color:#000; text-align:left;"; continue
+            v = val_df.at[i, col] if col in val_df.columns else np.nan
+            if pd.isna(v):
+                css.at[i, col] = "background-color:#F2F2F2; color:#000; text-align:center;"
+            else:
+                level = max(1, min(5, _round_half_up(float(v))))
+                bg = FPL_FDR_COLORS[level]
+                fg = "#000000" if (2 <= level <= 4) else "#FFFFFF"
+                css.at[i, col] = f"background-color:{bg}; color:{fg}; text-align:center;"
+    return (
+        disp_df.style
+        .apply(lambda _: css, axis=None)
+        .set_table_attributes('style="border-collapse:separate;border-spacing:6px 8px;width:100%;"')
+        .set_table_styles([
+            {"selector": "td, th", "props": [("border", "0")]},
+            {"selector": "thead th.col_heading", "props": [("font-weight", "700")]}
+        ], overwrite=False)
+        .set_properties(subset=[c for c in disp_df.columns if c not in ("Team","Total")],
+                        **{"border-radius":"12px","padding":"6px 10px","font-weight":"600"})
+        .set_properties(subset=["Team","Total"], **{"padding":"6px 6px","font-weight":"700"})
+    )
 
-    return teams_df, fx_df, event_df, fetched_at
+# --------------------------- App ---------------------------
+st.title("FPL ZINHEV - Fixture Difficulty Rating")
 
-def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int]) -> pd.Series:
-    """
-    Map strengths to 1..5 using explicit thresholds on the raw numbers.
-    `cuts` are the four boundaries separating bands 1|2|3|4|5.
-    Example: cuts=(1100, 1150, 1250, 1330)
-      <=1100 -> 1
-      1101-1150 -> 2
-      1151-1250 -> 3
-      1251-1330 -> 4
-      >1330 -> 5
-    """
-    c1, c2, c3, c4 = cuts
-    bins = [-np.inf, c1, c2, c3, c4, np.inf]
-    labels = [1, 2, 3, 4, 5]
-    # qcut/cut return Categorical; convert to int
-    return pd.cut(series, bins=bins, labels=labels, include_lowest=True).astype(int)
+with st.spinner("Loading FPL data..."):
+    teams_df, fixtures_df, event_df, fetched_at = load_fpl_data()
 
-def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
-    # Tune these once to mirror the table you want
-    cuts = (1040, 1100, 1240, 1340)
+# Session state for ratings
+if "ratings" not in st.session_state:
+    st.session_state["ratings"] = core.default_ratings_fixed(teams_df)
 
+# ---------- Sidebar: Tuning ----------
+with st.sidebar:
+    st.header("Tuning")
+    current_gw = core.determine_current_gw(event_df)
+    min_gw = int(fixtures_df["event"].min())
+    max_gw = int(fixtures_df["event"].max())
+    gw_start_default = core.clamp(int(current_gw), int(min_gw), int(max_gw))
+    gw_start = st.number_input("First Gameweek", min_value=min_gw, max_value=max_gw, value=gw_start_default, step=1)
+    gw_len = st.number_input("Number of gameweeks", min_value=1, max_value=max_gw - gw_start + 1, value=5, step=1)
 
-    home = strength_to_fixed_cutpoints(teams["str_away"], cuts=cuts)
-    away = strength_to_fixed_cutpoints(teams["str_home"], cuts=cuts)
+    rating_method = st.selectbox("Rating Method", ["Team + Opponent","Opponent only","Team only"], index=0)
+    col_w1, col_w2 = st.columns(2)
+    with col_w1: w_team = st.slider("Weight: Team", min_value=0.0, max_value=1.0, value=0.25, step=0.25)
+    with col_w2: w_opp  = st.slider("Weight: Opponent", min_value=0.0, max_value=1.0, value=0.75, step=0.25)
+    st.caption("Works best when both weights add to 1.0.")
 
-    return {
-        int(tid): {"home": int(h), "away": int(a)}
-        for tid, h, a in zip(teams["team_id"], home, away)
-    }
+    st.subheader("Presets")
+    preset = {"ratings": st.session_state["ratings"],
+              "settings": {"gw_start": gw_start, "gw_len": gw_len,
+                           "rating_method": rating_method, "w_team": w_team, "w_opp": w_opp}}
+    st.download_button("Download current preset", data=json.dumps(preset, indent=2),
+                       file_name="fdr_preset.json", mime="application/json", use_container_width=True)
+    uploaded = st.file_uploader("Upload preset (.json)", type=["json"])
+    if uploaded:
+        try:
+            obj = json.load(uploaded)
+            st.session_state["ratings"] = obj.get("ratings", st.session_state["ratings"])
+            s = obj.get("settings", {})
+            gw_start = int(s.get("gw_start", gw_start))
+            gw_len = int(s.get("gw_len", gw_len))
+            rating_method = s.get("rating_method", rating_method)
+            w_team = float(s.get("w_team", w_team)); w_opp = float(s.get("w_opp", w_opp))
+            st.success("Preset loaded.")
+        except Exception as e:
+            st.error(f"Invalid preset: {e}")
 
-def determine_current_gw(event_df: pd.DataFrame) -> int:
-    """Find the current gameweek from event_df."""
-    current = event_df.loc[event_df["is_current"] == True, "id"]
-    if not current.empty:
-        return int(current.iloc[0])
-    else:
-        next_gw = event_df.loc[event_df["is_next"] == True, "id"]
-        if not next_gw.empty:
-            return int(next_gw.iloc[0])
-        else:
-            # Fallback: find the last finished GW
-            finished = event_df.loc[event_df["finished"] == True, "id"]
-            if not finished.empty:
-                return int(finished.max())
-            else: 
-                return 1
+# ---------- Ratings editor ----------
+with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expanded=False):
+    st.write("Set how tough each team is to face at home or away.")
+    left, right = st.columns(2)
+    split = math.ceil(len(teams_df) / 2)
+    for col, subdf in zip((left, right), (teams_df.iloc[:split], teams_df.iloc[split:])):
+        with col:
+            for _, row in subdf.sort_values("name").iterrows():
+                tid, name = int(row["team_id"]), row["name"]
+                cols = st.columns([2, 1, 1])
+                with cols[0]: st.write(f"**{name}**")
+                with cols[1]:
+                    st.session_state["ratings"][tid]["home"] = st.number_input(
+                        f"Home {name}", key=f"r{tid}h", min_value=1, max_value=5,
+                        value=int(st.session_state["ratings"][tid]["home"]), step=1, label_visibility="collapsed")
+                with cols[2]:
+                    st.session_state["ratings"][tid]["away"] = st.number_input(
+                        f"Away {name}", key=f"r{tid}a", min_value=1, max_value=5,
+                        value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
 
-# -----------
-def compute_fixture_difficulty(
-    team_is_home: bool,
-    team_rating_home: int,
-    team_rating_away: int,
-    opp_rating_home: int,
-    opp_rating_away: int,
-    method: str,
-    w_team: float,
-    w_opp: float
-) -> float:
+# ---------- Team visibility ----------
+with st.expander("Team Visibility", expanded=False):
+    all_teams = teams_df.sort_values("name")
+    team_options = [f'{r["name"]} ({r["short"]})' for _, r in all_teams.iterrows()]
+    default_sel = team_options
+    current = st.multiselect("Show teams in ticker:", team_options, default=default_sel)
+    visible_ids = []
+    for opt in current:
+        short = opt.split("(")[-1].strip(")")
+        short = short[:-1] if short.endswith(")") else short
+        row = all_teams[all_teams["short"] == short].iloc[0]
+        visible_ids.append(int(row["team_id"]))
 
-    team_context = team_rating_home if team_is_home else team_rating_away
-    opp_context = opp_rating_away if team_is_home else opp_rating_home
+# ---------- Build & display ticker ----------
+disp_df, val_df = core.build_ticker(
+    teams=teams_df, fixtures=fixtures_df, ratings=st.session_state["ratings"],
+    gw_start=int(gw_start), gw_len=int(gw_len),
+    visible_team_ids=visible_ids if current else list(teams_df["team_id"]),
+    method=rating_method, w_team=w_team, w_opp=w_opp,
+)
 
-    if method == "Opponent only":
-        fdr = opp_context
-    elif method == "Team only":
-        fdr = 6 - team_context
-    else:
-        s = max(1e6, (w_team + w_opp))
-        w_t, w_o = w_team / s, w_opp / s
-        diff = (w_o * opp_context) + (w_t * (6 - team_context))
-    # clip to [1, 5] just in case
-    return float(np.clip(diff, 1.0, 5.0))        
- 
-def build_team_row(
-    tid: int,
-    gw_cols: List[int],
-    teams: pd.DataFrame,
-    fixtures: pd.DataFrame,
-    ratings: Dict[int, Dict[str, int]],
-    method: str,
-    w_team: float,
-    w_opp: float,
-) -> Tuple[Dict[str, any], Dict[str, any]]:
-    """
-    Build the ticker row for ONE team across the selected gameweeks.
+st.subheader("Fixture Ticker")
+st.caption("Green = easier fixtures. Red = tougher fixtures.")
+styled = style_fpl_like(disp_df, val_df).hide(axis="index")
+st.write(styled)
 
-    Returns:
-        display_cells: dict with text labels (opponents like 'MCI (H)')
-        value_cells:   dict with numeric difficulty values for styling
+# ---------- Display league table ----------
+st.subheader("Premier League Table")
+with st.spinner("Building table from finished fixtures..."):
+    table_df = core.build_pl_table(teams_df, fixtures_df)
 
-    Example (for team 'ARS', 2 GWs):
-    display_cells = {
-        "Team": "ARS",
-        "1": "CHE (H)",
-        "2": "—",
-        "Total": 3.5
-    }
-    value_cells = {
-        "Team": NaN,
-        "1": 3.5,
-        "2": NaN,
-        "Total": 3.5
-    }
-    """
+display_cols = ["Pos","Team","P","W","D","L","GF","GA","GD","Pts"]
+table_disp = table_df[display_cols].copy()
 
-    # Build a lookup from team_id → short name, e.g. {1:"ARS",2:"CHE"}
-    id2short = dict(zip(teams["team_id"], teams["short"]))
+st.markdown("""
+<style>
+thead tr th { position: sticky; top: 0; background: white; z-index: 1; }
+td, th { font-variant-numeric: tabular-nums; }
+</style>
+""", unsafe_allow_html=True)
 
-    # Initialize row for this team
-    team_short = id2short[tid]
-    display_cells = {"Team": team_short}  # what users see
-    value_cells = {"Team": np.nan}        # numeric values for coloring
-    total = 0.0                           # running sum of fixture difficulties
+def _pos_band(pos: int) -> str:
+    if pos <= 4:      return "#34a853"
+    if pos == 5:      return "#0048FF"
+    if pos >= 18:     return "#E60023"
+    return "#ffffff"
 
-    # Loop through each GW column
-    for gw in gw_cols:
-        # Find all fixtures in this GW where this team is either home or away
-        games = fixtures[
-            (fixtures["event"] == gw) &
-            ((fixtures["home_id"] == tid) | (fixtures["away_id"] == tid))
-        ]
+def _style_pos_only(df: pd.DataFrame) -> pd.DataFrame:
+    styles = pd.DataFrame("", index=df.index, columns=df.columns)
+    for i, pos in enumerate(df["Pos"]):
+        styles.at[i, "Pos"] = f"background-color:{_pos_band(int(pos))}; font-weight:700; text-align:center;"
+    return styles
 
-        if games.empty:
-            # No fixture = blank GW
-            display_cells[str(gw)] = "—"
-            value_cells[str(gw)] = np.nan
-        else:
-            labels = []  # opponent labels
-            diffs = []   # difficulty values
+styler = (
+    table_disp.style
+    .hide(axis="index")
+    .set_table_styles([
+        {"selector": "th", "props": [("text-align", "left")]},
+        {"selector": "td", "props": [("padding", "6px 8px")]}
+    ])
+    .set_properties(subset=["Pts"], **{"font-weight": "700"})
+    .apply(_style_pos_only, axis=None)
+)
+st.write(styler, unsafe_allow_html=True)
 
-            for _, g in games.iterrows():
-                # Are we the home team?
-                team_is_home = (g["home_id"] == tid)
-                # Find opponent ID
-                opp_id = int(g["away_id"] if team_is_home else g["home_id"])
-                # Make a label like "CHE (H)" or "LIV (A)"
-                label = f"{id2short[opp_id]}" + (" (H)" if team_is_home else " (A)")
-
-                # Compute difficulty using ratings + weights
-                d = compute_fixture_difficulty(
-                    team_is_home=team_is_home,
-                    team_rating_home=ratings[tid]["home"],
-                    team_rating_away=ratings[tid]["away"],
-                    opp_rating_home=ratings[opp_id]["home"],
-                    opp_rating_away=ratings[opp_id]["away"],
-                    method=method,
-                    w_team=w_team,
-                    w_opp=w_opp,
-                )
-
-                labels.append(label)
-                diffs.append(d)
-
-            # If multiple games (double GW), join labels and average difficulty
-            display_cells[str(gw)] = " / ".join(labels)
-            value_cells[str(gw)] = float(np.mean(diffs))  # average for styling color
-            total += sum(diffs)                           # sum counts for Total
-
-    # Add the total at the end
-    display_cells["Total"] = round(total, 2)
-    value_cells["Total"] = total
-
-    return display_cells, value_cells
-
-def build_ticker(
-    teams: pd.DataFrame,
-    fixtures: pd.DataFrame,
-    ratings: Dict[int, Dict[str, int]],
-    gw_start: int,
-    gw_len: int,
-    visible_team_ids: List[int],
-    method: str,
-    w_team: float,
-    w_opp: float,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Build the full ticker for all selected teams.
-
-    Returns:
-        disp_df : DataFrame with labels (strings like 'CHE (H)')
-        val_df  : DataFrame with numeric difficulties (for coloring)
-
-    Example output (2 teams × 2 GWs):
-
-    disp_df =
-      Team    1        2   Total
-    0  ARS  CHE (H)    —    3.5
-    1  CHE  ARS (A)  LIV (H)  7.0
-
-    val_df =
-      Team    1     2   Total
-    0  ARS  3.5   NaN    3.5
-    1  CHE  3.5   3.5    7.0
-    """
-
-    # The GW columns we want to show, e.g. [6,7,8,9,10,11]
-    gw_cols = list(range(gw_start, gw_start + gw_len))
-
-    rows, rows_vals = [], []
-
-    # Loop over each team we want to display
-    for tid in visible_team_ids:
-        display_cells, value_cells = build_team_row(
-            tid, gw_cols, teams, fixtures, ratings, method, w_team, w_opp
-        )
-        rows.append(display_cells)
-        rows_vals.append(value_cells)
-
-    # Convert to DataFrames
-    disp_df = pd.DataFrame(rows)
-    val_df = pd.DataFrame(rows_vals)
-
-    # Sort teams by Total difficulty (easiest first)
-    disp_df = disp_df.sort_values("Total", ascending=True, kind="mergesort").reset_index(drop=True)
-    val_df = val_df.loc[disp_df.index].reset_index(drop=True)
-
-    return disp_df, val_df
-
-def build_pl_table(teams_df: pd.DataFrame, fixtures_df: pd.DataFrame) -> pd.DataFrame:
-    """Build a simple league table from teams and fixtures data."""
-    # Initialize table with team names
-    table = teams_df[["team_id", "short"]].rename(columns={"short": "Team"}).set_index("team_id")
-    table["P"] = 0  # Played
-    table["W"] = 0  # Wins
-    table["D"] = 0  # Draws
-    table["L"] = 0  # Losses
-    table["GF"] = 0  # Goals For
-    table["GA"] = 0  # Goals Against
-    table["GD"] = 0 # Goal Difference
-    table["Pts"] = 0# Points
-
-    # Process each finished fixture
-    finished_fixtures = fixtures_df[fixtures_df["finished"] == True]
-    for _, match in finished_fixtures.iterrows():
-        home_id = match["home_id"]
-        away_id = match["away_id"]
-        home_goals = match.get("team_h_score", 0)
-        away_goals = match.get("team_a_score", 0)
-
-        # Update played games
-        table.at[home_id, "P"] += 1
-        table.at[away_id, "P"] += 1
-
-        # Update goals for and against
-        table.at[home_id, "GF"] += home_goals
-        table.at[home_id, "GA"] += away_goals
-        table.at[away_id, "GF"] += away_goals
-        table.at[away_id, "GA"] += home_goals
-
-        # Update wins, draws, losses and points
-        if home_goals > away_goals:
-            table.at[home_id, "W"] += 1
-            table.at[away_id, "L"] += 1
-            table.at[home_id, "Pts"] += 3
-        elif home_goals < away_goals:
-            table.at[away_id, "W"] += 1
-            table.at[home_id, "L"] += 1
-            table.at[away_id, "Pts"] += 3
-        else:
-            table.at[home_id, "D"] += 1
-            table.at[away_id, "D"] += 1
-            table.at[home_id, "Pts"] += 1
-            table.at[away_id, "Pts"] += 1
-     
-    # Calculate goal difference
-    table["GD"] = table["GF"] - table["GA"]     
-    # Validate required columns from your builder
-    required = {"Team","P","W","D","L","GF","GA","GD","Pts"}
-    missing = required - set(table.columns)
-    if missing:
-        st.error(f"Table is missing columns: {sorted(missing)}")
-    else:
-        # Sort by PL tiebreakers: Pts desc, GD desc, GF desc, GA asc, then Team asc
-        table = table.sort_values(
-            by=["Pts", "GD", "GF", "Team"],
-            ascending=[False, False, False, True],
-            kind="mergesort",
-            ignore_index=True,
-        )
-    # Add position column
-    table.insert(0, "Pos", range(1, len(table) + 1)) 
-    return table.reset_index()
-
-
-teams_df, fixtures_df, event_df, fetched_at = load_fpl_data()
-print(fetched_at)
-print(fixtures_df)
-print(build_pl_table(teams_df, fixtures_df))
+# --- Footer / meta ---
+tz = "Asia/Ho_Chi_Minh"
+bits = []
+if fetched_at is not None:
+    try:
+        local = pd.to_datetime(fetched_at, utc=True).tz_convert(tz)
+        bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} My Tho time")
+    except Exception:
+        pass
+src = "Source: FPL fixtures (finished matches only)"
+tail = " • ".join(bits) + (" • " if bits else "")
+st.caption(f"{tail}{src}")
