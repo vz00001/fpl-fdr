@@ -58,7 +58,7 @@ with st.spinner("Loading FPL data..."):
 
 # Session state for ratings
 if "ratings" not in st.session_state:
-    st.session_state["ratings"] = core.default_ratings_fixed(teams_df)
+    st.session_state["ratings"] = core.table_ratings_fixed(table_df, teams_df)
 
 # ---------- Sidebar: Tuning ----------
 with st.sidebar:
@@ -115,39 +115,6 @@ with st.sidebar:
     if not visible_ids:
         visible_ids = id_options
 
-# # ---------- Ratings editor ----------
-# with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expanded=False):
-#     st.write("Set how tough each team is to face at home or away.")
-#     left, right = st.columns(2)
-#     split = math.ceil(len(teams_df) / 2)
-#     for col, subdf in zip((left, right), (teams_df.iloc[:split], teams_df.iloc[split:])):
-#         with col:
-#             for _, row in subdf.sort_values("name").iterrows():
-#                 tid, name = int(row["team_id"]), row["name"]
-#                 cols = st.columns([2, 1, 1])
-#                 with cols[0]: st.write(f"**{name}**")
-#                 with cols[1]:
-#                     st.session_state["ratings"][tid]["home"] = st.number_input(
-#                         f"Home {name}", key=f"r{tid}h", min_value=1, max_value=5,
-#                         value=int(st.session_state["ratings"][tid]["home"]), step=1, label_visibility="collapsed")
-#                 with cols[2]:
-#                     st.session_state["ratings"][tid]["away"] = st.number_input(
-#                         f"Away {name}", key=f"r{tid}a", min_value=1, max_value=5,
-#                         value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
-
-# ---------- Team visibility ----------
-# with st.expander("Team Visibility", expanded=False):
-#     all_teams = teams_df.sort_values("name")
-#     team_options = [f'{r["name"]} ({r["short"]})' for _, r in all_teams.iterrows()]
-#     default_sel = team_options
-#     current = st.multiselect("Show teams in ticker:", team_options, default=default_sel)
-#     visible_ids = []
-#     for opt in current:
-#         short = opt.split("(")[-1].strip(")")
-#         short = short[:-1] if short.endswith(")") else short
-#         row = all_teams[all_teams["short"] == short].iloc[0]
-#         visible_ids.append(int(row["team_id"]))
-
 # ---------- Build & display ticker ----------
 disp_df, val_df = core.build_ticker(
     teams=teams_df, 
@@ -167,9 +134,8 @@ styled = style_fpl_like(disp_df, val_df).hide(axis="index")
 st.write(styled)
 
 # ---------- Display league table ----------
+st.divider()
 st.subheader("Premier League Table")
-# with st.spinner("Building table from finished fixtures..."):
-#     table_df = core.build_pl_table(teams_df, fixtures_df)
 
 display_cols = ["Pos","Team","P","W","D","L","GF","GA","GD","Pts"]
 table_disp = table_df[display_cols].copy()
@@ -235,6 +201,6 @@ if fetched_at is not None:
         bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} My Tho time")
     except Exception:
         pass
-src = "Source: FPL fixtures (finished matches only). ^0.4.2"
+src = "Source: FPL fixtures (finished matches only). ^0.4.3"
 tail = " • ".join(bits) + (" • " if bits else "")
 st.caption(f"{tail}{src}")

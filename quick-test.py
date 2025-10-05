@@ -55,6 +55,17 @@ def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
     return {int(tid): {"home": int(h), "away": int(a)}
             for tid, h, a in zip(teams["team_id"], home, away)}
 
+def table_ratings_fixed(table: pd.DataFrame, team: pd.DataFrame) -> Dict[int, Dict[str, int]]:
+    cuts = (0, 5, 10, 15)
+    # NOTE: mirrors your current mapping (home <- str_away, away <- str_home)
+    home = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
+    away = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
+    # return {int(tid): {"home": int(h), "away": int(a)}
+    #         for tid, h, a in zip(table["team_id"], home, away)}
+    short2id = {r["short"]: int(r["team_id"]) for _, r in team.iterrows()}
+    return {short2id[team_short]: {"home": 6 - int(h) + 1, "away": 6 - int(a)}
+            for team_short, h, a in zip(table["Team"], home, away)}
+
 def determine_current_gw(event_df: pd.DataFrame) -> int:
     current = event_df.loc[event_df["is_current"] == True, "id"]
     if not current.empty:
@@ -219,4 +230,22 @@ def clamp(n: int, lo: int, hi: int) -> int:
 teams_df, fixtures_df, event_df, fetched_at = fetch_fpl_data()
 print(teams_df)
 print(fixtures_df)
-print(build_pl_table(teams_df, fixtures_df))
+table_df = build_pl_table(teams_df, fixtures_df)
+print(table_df)
+print(table_ratings_fixed(table_df, teams_df))
+
+_all = teams_df.sort_values("name")
+disp_df, val_df = build_ticker(
+    teams=teams_df, 
+    fixtures=fixtures_df, 
+    ratings=table_ratings_fixed(table_df, teams_df),
+    gw_start=int(7), 
+    gw_len=int(5),
+    visible_team_ids=list(map(int, _all["team_id"])),
+    method="Team + Opponent", 
+    w_team=0.25, 
+    w_opp=0.75,
+)
+
+print(disp_df)
+print(val_df)   
