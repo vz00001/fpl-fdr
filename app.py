@@ -100,7 +100,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
         ], overwrite=False)
         .set_properties(subset=[c for c in disp_df.columns if c not in ("Team","Total")],
                         **{"border-radius":"12px","padding":"6px 10px","font-weight":"600"})
-        .set_properties(subset=["Team","Total"], **{"padding":"6px 10px","font-weight":"1100"})
+        .set_properties(subset=["Team","Total"], **{"padding":"6px 6px","font-weight":"1900"})
     )
     return styler
 
