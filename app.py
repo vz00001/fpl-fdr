@@ -97,7 +97,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
     styler = (
         disp_df.style
         .apply(lambda _: css, axis=None)
-        .set_tooltips(tooltips, escape=False)   # 👈 allow HTML tags inside tooltip text
+        .set_tooltips(tooltips, escape=False) 
         .set_table_attributes('style="border-collapse:separate;border-spacing:6px 8px;width:100%;"')
         .set_table_styles([
             {"selector": "td, th", "props": [("border", "0")]},
@@ -107,7 +107,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
                         **{"border-radius":"12px","padding":"6px 10px","font-weight":"600"})
         .set_properties(subset=["Team","Total"], **{"padding":"6px 6px","font-weight":"700"})
     )
-
+    return styler
 
 # --------------------------- App ---------------------------
 st.title("FPL ZINHEV - Fixture Difficulty Rating")
