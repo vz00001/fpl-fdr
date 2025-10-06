@@ -83,10 +83,9 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
 
                 # Build a multiline tooltip with plain text (use \n)
                 tt = (
-                    f"{team_name} in GW {col}\n"
                     f"Opponent(s): {label}\n"
                     f"Raw difficulty: {float(v):.2f}\n"
-                    f"Rounded (1–5): {level}"
+                    f"Rounded: {level}"
                 )
                 safe_tt = tt.replace('"', "'")  # avoid breaking HTML attribute
                 html_df.at[i, col] = f'<span class="fdr-tt" data-tt="{safe_tt}">{label}</span>'
@@ -101,7 +100,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
         ], overwrite=False)
         .set_properties(subset=[c for c in disp_df.columns if c not in ("Team","Total")],
                         **{"border-radius":"12px","padding":"6px 10px","font-weight":"600"})
-        .set_properties(subset=["Team","Total"], **{"padding":"6px 6px","font-weight":"700"})
+        .set_properties(subset=["Team","Total"], **{"padding":"6px 10px","font-weight":"1100"})
     )
     return styler
 
