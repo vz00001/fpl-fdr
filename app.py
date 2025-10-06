@@ -88,10 +88,12 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
                 opp_label = disp_df.at[i, col]  # e.g., "ful" or "FUL / ars"
                 # Build a friendly explanation string
                 tooltips.at[i, col] = (
-                    f"<b>{team_name}</b> in GW {col}<br>"
-                    f"Opponent(s): {opp_label}<br>"
-                    f"Raw difficulty: {float(v):.2f}<br>"
-                    f"Rounded (1–5): <b>{level}</b>"
+                    # f"<b>{team_name}</b> in GW {col}<br>"
+                    # f"Opponent(s): {opp_label}<br>"
+                    # f"Raw difficulty: {float(v):.2f}<br>"
+                    # f"Rounded (1–5): <b>{level}</b>"
+                    f"Raw difficulty: {float(v):.2f} || "
+                    f"Rounded (1–5): {level}"                    
                 )
 
     styler = (
