@@ -97,7 +97,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
     styler = (
         disp_df.style
         .apply(lambda _: css, axis=None)
-        .set_tooltips(tooltips, escape=False) 
+        .set_tooltips(tooltips)  # <-- enable the popups
         .set_table_attributes('style="border-collapse:separate;border-spacing:6px 8px;width:100%;"')
         .set_table_styles([
             {"selector": "td, th", "props": [("border", "0")]},
