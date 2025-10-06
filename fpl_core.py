@@ -192,7 +192,7 @@ def build_ticker(
                 value_cells[str(gw)] = float(np.mean(diffs))
                 total += sum(diffs)
 
-        display_cells["Total"] = int(total) if float(total).is_integer() else round(total, 2)
+        display_cells["Total"] = int(total) if float(total).is_integer() else round(total, 3)
         value_cells["Total"]   = float(total)
         rows.append(display_cells); rows_vals.append(value_cells)
 
