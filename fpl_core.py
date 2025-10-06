@@ -67,7 +67,7 @@ def table_ratings_fixed(table: pd.DataFrame, teams: pd.DataFrame) -> Dict[int, D
 def determine_current_gw(event_df: pd.DataFrame) -> int:
     current = event_df.loc[event_df["is_current"] == True, "id"]
     if not current.empty:
-        return int(current.iloc[0])
+        return int(current.iloc[0]) + 1
     nxt = event_df.loc[event_df["is_next"] == True, "id"]
     if not nxt.empty:
         return int(nxt.iloc[0])
@@ -192,7 +192,7 @@ def build_ticker(
                 value_cells[str(gw)] = float(np.mean(diffs))
                 total += sum(diffs)
 
-        display_cells["Total"] = round(total, 2)
+        display_cells["Total"] = float(total)
         value_cells["Total"]   = float(total)
         rows.append(display_cells); rows_vals.append(value_cells)
 

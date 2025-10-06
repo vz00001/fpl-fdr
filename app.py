@@ -92,7 +92,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
                     # f"Opponent(s): {opp_label}<br>"
                     # f"Raw difficulty: {float(v):.2f}<br>"
                     # f"Rounded (1–5): <b>{level}</b>"
-                    f"Raw difficulty: {float(v):.2f} ==>>>>> "
+                    f"Raw difficulty: {float(v):.2f}  ==>>>  "
                     f"{level}"                    
                 )
 
