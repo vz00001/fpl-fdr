@@ -13,31 +13,31 @@ core = reload(core)
 st.set_page_config(page_title="FPL ZINHEV - Fixture Difficulty Rating", layout="wide")
 st.markdown("""
 <style>
-/* Make pandas tooltips look like real popups */
-table.dataframe td .pd-tooltip, table.dataframe th .pd-tooltip { 
-  visibility: hidden; 
-  width: 220px;
+.fdr-tt { position: relative; display:inline-block; }
+.fdr-tt::after {
+  content: attr(data-tt);
+  white-space: pre-line;            /* \n becomes line-breaks */
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -110%);
   background: #1e1e2f;
   color: #fff;
-  text-align: left;
-  border-radius: 8px;
   padding: 8px 10px;
-  position: absolute;
-  z-index: 1;
-  transform: translate(-50%, -110%);
-  left: 50%;
-  opacity: 0;
-  transition: opacity .15s ease-in-out;
+  border-radius: 8px;
   box-shadow: 0 8px 22px rgba(0,0,0,.25);
-  font-size: 12px;
-  line-height: 1.25;
+  width: 240px;
+  z-index: 5;
+  transition: opacity .15s ease-in-out;
+  pointer-events: none;
+  font-size: 12px; line-height: 1.25;
 }
-table.dataframe td:hover .pd-tooltip, table.dataframe th:hover .pd-tooltip {
-  visibility: visible; opacity: 1;
-}
+.fdr-tt:hover::after { visibility: visible; opacity: 1; }
 table.dataframe td, table.dataframe th { position: relative; }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ------------- cached wrappers around core.fetch -------------
 @st.cache_data(ttl=3600)
@@ -54,52 +54,46 @@ def _round_half_up(x: float) -> int:
 
 def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
     """
-    Style the ticker with FPL-like colors and add per-cell tooltips
-    explaining the difficulty value. Uses only info we already have:
-    - Team name from disp_df["Team"]
-    - Opponent label(s) from disp_df[gw]
-    - Numeric difficulty from val_df[gw]
+    Style the ticker with FPL-like colors and add per-cell hover popups
+    using a span + data-tt attribute (no pandas.set_tooltips dependency).
     """
+    # We inject HTML into a copy so we can render with escape=False
+    html_df = disp_df.copy()
     css = pd.DataFrame("", index=disp_df.index, columns=disp_df.columns)
-    tooltips = pd.DataFrame("", index=disp_df.index, columns=disp_df.columns)
 
     for i in disp_df.index:
         team_name = disp_df.at[i, "Team"]
         for col in disp_df.columns:
             if col in ("Team", "Total"):
                 css.at[i, col] = "font-weight:700; background-color:#ffffff; color:#000; text-align:left;"
-                # optional tooltip for Total
-                if col == "Total":
-                    vtot = val_df.at[i, "Total"] if "Total" in val_df.columns else np.nan
-                    if pd.notna(vtot):
-                        tooltips.at[i, col] = f"Sum of rounded cell values: {vtot:.2f}"
                 continue
 
             v = val_df.at[i, col] if col in val_df.columns else np.nan
+            label = disp_df.at[i, col]
+
             if pd.isna(v):
                 css.at[i, col] = "background-color:#F2F2F2; color:#000; text-align:center;"
-                tooltips.at[i, col] = "No fixture scheduled"
+                # keep an em dash or label; optional tooltip
+                html_df.at[i, col] = f'<span class="fdr-tt" data-tt="No fixture scheduled">{label}</span>'
             else:
                 level = int(max(1, min(5, _round_half_up(float(v)))))
                 bg = FPL_FDR_COLORS[level]
                 fg = "#000000" if (2 <= level <= 4) else "#FFFFFF"
                 css.at[i, col] = f"background-color:{bg}; color:{fg}; text-align:center;"
 
-                opp_label = disp_df.at[i, col]  # e.g., "ful" or "FUL / ars"
-                # Build a friendly explanation string
-                tooltips.at[i, col] = (
-                    # f"<b>{team_name}</b> in GW {col}<br>"
-                    # f"Opponent(s): {opp_label}<br>"
-                    # f"Raw difficulty: {float(v):.2f}<br>"
-                    # f"Rounded (1–5): <b>{level}</b>"
-                    f"Raw difficulty: {float(v):.2f}  ==>>>  "
-                    f"{level}"                    
+                # Build a multiline tooltip with plain text (use \n)
+                tt = (
+                    f"{team_name} in GW {col}\n"
+                    f"Opponent(s): {label}\n"
+                    f"Raw difficulty: {float(v):.2f}\n"
+                    f"Rounded (1–5): {level}"
                 )
+                safe_tt = tt.replace('"', "'")  # avoid breaking HTML attribute
+                html_df.at[i, col] = f'<span class="fdr-tt" data-tt="{safe_tt}">{label}</span>'
 
     styler = (
-        disp_df.style
+        html_df.style
         .apply(lambda _: css, axis=None)
-        .set_tooltips(tooltips)  # <-- enable the popups
         .set_table_attributes('style="border-collapse:separate;border-spacing:6px 8px;width:100%;"')
         .set_table_styles([
             {"selector": "td, th", "props": [("border", "0")]},
@@ -110,6 +104,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
         .set_properties(subset=["Team","Total"], **{"padding":"6px 6px","font-weight":"700"})
     )
     return styler
+
 
 # --------------------------- App ---------------------------
 st.title("FPL ZINHEV - Fixture Difficulty Rating")
