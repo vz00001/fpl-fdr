@@ -191,7 +191,9 @@ disp_df, val_df = core.build_ticker(
 st.subheader("Fixture Ticker")
 st.caption("Green = easier fixtures. Red = tougher fixtures.")
 styled = style_fpl_like(disp_df, val_df).hide(axis="index")
-st.write(styled)
+# Render the full HTML manually so Streamlit doesn't escape tooltip markup
+st.markdown(styled.to_html(escape=False), unsafe_allow_html=True)
+
 
 # ---------- Display league table ----------
 st.divider()
