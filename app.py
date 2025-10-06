@@ -72,7 +72,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
                 if col == "Total":
                     vtot = val_df.at[i, "Total"] if "Total" in val_df.columns else np.nan
                     if pd.notna(vtot):
-                        tooltips.at[i, col] = f"<b>Total difficulty</b><br>Sum of rounded cell values: {vtot:.2f}"
+                        tooltips.at[i, col] = f"Sum of rounded cell values: {vtot:.2f}"
                 continue
 
             v = val_df.at[i, col] if col in val_df.columns else np.nan
@@ -92,8 +92,8 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
                     # f"Opponent(s): {opp_label}<br>"
                     # f"Raw difficulty: {float(v):.2f}<br>"
                     # f"Rounded (1–5): <b>{level}</b>"
-                    f"Raw difficulty: {float(v):.2f} || "
-                    f"Rounded (1–5): {level}"                    
+                    f"Raw difficulty: {float(v):.2f} ==>>>>> "
+                    f"{level}"                    
                 )
 
     styler = (
