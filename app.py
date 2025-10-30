@@ -273,7 +273,7 @@ with st.sidebar:
 
     # --- Position chips
     pos_options = ["All", "GK", "DF", "MF", "FW"]
-    selected_pos = st.segmented_control("By Position", pos_options, default="All", use_container_width=True)
+    selected_pos = st.segmented_control("By Position", pos_options, default="All")
 
     # --- Price row: <  [ slider ]  >
     min_price = float(players_df["price_m"].min())
