@@ -10,7 +10,7 @@ from importlib import reload
 core = reload(core)
 
 
-st.set_page_config(page_title="FPL ZINHEV - Fixture Difficulty Rating", layout="wide")
+st.set_page_config(page_title="Fixture Difficulty Rating", layout="wide")
 st.markdown("""
 <style>
 .fdr-tt { position: relative; display:inline-block; }
@@ -109,7 +109,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
 st.title("FPL - Fixture Difficulty Rating")
 
 with st.spinner("Loading FPL data..."):
-    teams_df, fixtures_df, event_df, fetched_at, players_df = load_fpl_data()
+    teams_df, fixtures_df, event_df, fetched_at, players_df = core.fetch_fpl_data()
     table_df = core.build_pl_table(teams_df, fixtures_df)
 
 # Session state for ratings
