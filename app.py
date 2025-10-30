@@ -137,7 +137,7 @@ with st.sidebar:
               "settings": {"gw_start": gw_start, "gw_len": gw_len,
                            "rating_method": rating_method, "w_team": w_team, "w_opp": w_opp}}
     st.download_button("Download current preset", data=json.dumps(preset, indent=2),
-                       file_name="fdr_preset.json", mime="application/json", use_container_width=True)
+                       file_name="fdr_preset.json", mime="application/json", width='stretch')
     uploaded = st.file_uploader("Upload preset (.json)", type=["json"])
     if uploaded:
         try:
@@ -286,7 +286,7 @@ with st.sidebar:
 
     c1, c2, c3 = st.columns([1, 8, 1])
     with c1:
-        dec = st.button("‹", key="ict_price_dec", width=True)
+        dec = st.button("‹", key="ict_price_dec", width='stretch')
     with c2:
         sel_price = st.slider(
             "Max Price (£m)",
@@ -297,7 +297,7 @@ with st.sidebar:
             help="Use the chevrons to fine-tune, or drag the slider.",
         )
     with c3:
-        inc = st.button("›", key="ict_price_inc", width=True)
+        inc = st.button("›", key="ict_price_inc", width='stretch')
 
     # nudge logic (clamped & rounded to 1dp)
     if dec:
@@ -370,18 +370,18 @@ styler = (
         .background_gradient(subset=["ICT", "Pts"], cmap="Greens")
 )
 
-st.dataframe(styler, use_container_width=True)
+st.dataframe(styler, width='stretch')
 st.caption(f"Showing {len(page_df)} of {total_rows} matching players.")
 
 # --- Pagination bar (below the table)
 st.divider()
 col_prev, col_page, col_next = st.columns([1, 2, 1])
 with col_prev:
-    if st.button("⬅️ Previous", use_container_width=True, disabled=(st.session_state[pg_key] <= 1)):
+    if st.button("⬅️ Previous", width='stretch', disabled=(st.session_state[pg_key] <= 1)):
         st.session_state[pg_key] -= 1
 with col_page:
     st.write(f"Page {st.session_state[pg_key]} / {total_pages}")
 with col_next:
-    if st.button("Next ➡️", use_container_width=True, disabled=(st.session_state[pg_key] >= total_pages)):
+    if st.button("Next ➡️", width='stretch', disabled=(st.session_state[pg_key] >= total_pages)):
         st.session_state[pg_key] += 1
 
