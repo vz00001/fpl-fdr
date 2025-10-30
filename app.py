@@ -109,7 +109,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
 st.title("FPL - Fixture Difficulty Rating")
 
 with st.spinner("Loading FPL data..."):
-    teams_df, fixtures_df, event_df, fetched_at, players_df = core.fetch_fpl_data()
+    teams_df, fixtures_df, event_df, fetched_at, players_df = load_fpl_data()
     table_df = core.build_pl_table(teams_df, fixtures_df)
 
 # Session state for ratings
@@ -293,7 +293,7 @@ pos_arg = "ALL" if selected_pos == "All" else selected_pos
 filtered = core.combine_filters(pos_arg, sel_price, players_df)
 
 # --- Optional: pagination
-page_size = st.selectbox("Rows per page", [25, 50, 100], index=0, key="ict_page_size")
+page_size = st.selectbox("Rows per page", [10, 20, 40], index=0, key="ict_page_size")
 total_rows = len(filtered)
 total_pages = max(1, (total_rows + page_size - 1) // page_size)
 
