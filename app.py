@@ -40,7 +40,7 @@ table.dataframe td, table.dataframe th { position: relative; }
 
 
 # ------------- cached wrappers around core.fetch -------------
-@st.cache_data(ttl=3600)
+# @st.cache_data(ttl=360)
 def load_fpl_data():
     return core.fetch_fpl_data()
 
