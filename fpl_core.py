@@ -51,7 +51,7 @@ def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Times
     fx_df["event"] = fx_df["event"].astype(int)
 
     fetched_at = pd.Timestamp.now(tz="UTC")
-    return teams_df, fx_df, event_df, fetched_at
+    return teams_df, fx_df, event_df, fetched_at, players_df
 
 
 # ---------------------------
