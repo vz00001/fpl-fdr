@@ -40,7 +40,7 @@ table.dataframe td, table.dataframe th { position: relative; }
 
 
 # ------------- cached wrappers around core.fetch -------------
-# @st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600)
 def load_fpl_data():
     return core.fetch_fpl_data()
 
@@ -106,7 +106,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
 
 
 # --------------------------- App ---------------------------
-st.title("FPL - Fixture Difficulty Rating")
+st.title("Fixture Difficulty Rating")
 
 with st.spinner("Loading FPL data..."):
     teams_df, fixtures_df, event_df, fetched_at, players_df = load_fpl_data()
@@ -263,56 +263,82 @@ src = "Source: FPL fixtures (finished matches only). ^0.5.4"
 tail = " • ".join(bits) + (" • " if bits else "")
 st.caption(f"{tail}{src}")
 
-# ---------- ICTindex: Filters + Table ----------
+# ---------- ICTindex: Filters + Table (polished UI) ----------
 
 st.subheader("ICT Index")
+st.caption("Sort players by their ICT Index — the combined measure of Influence, Creativity, and Threat.")
 
-# --- Sidebar controls
 with st.sidebar:
-    st.header("ICT Filters")
+    st.header("⚙️ ICT Filters")
 
-    # 1) By Position
+    # --- Position chips
     pos_options = ["All", "GK", "DF", "MF", "FW"]
-    selected_pos = st.segmented_control("By Position", pos_options, default="All")
+    selected_pos = st.segmented_control("By Position", pos_options, default="All", use_container_width=True)
 
-    # 2) Max Price slider
+    # --- Price row: <  [ slider ]  >
     min_price = float(players_df["price_m"].min())
     max_price = float(players_df["price_m"].max())
-    sel_price = st.slider(
-        "Max Price (£m)",
-        min_value=round(min_price, 1),
-        max_value=round(max_price, 1),
-        value=round(max_price, 1),
-        step=0.1,
-    )
+    step = 0.1
 
-# Normalize your “All” to the value your function expects
+    # keep slider value in session (so buttons & slider stay in sync)
+    if "ict_price" not in st.session_state:
+        st.session_state["ict_price"] = round(max_price, 1)
+
+    c1, c2, c3 = st.columns([1, 8, 1])
+    with c1:
+        dec = st.button("‹", key="ict_price_dec", use_container_width=True)
+    with c2:
+        sel_price = st.slider(
+            "Max Price (£m)",
+            min_value=round(min_price, 1),
+            max_value=round(max_price, 1),
+            value=float(st.session_state["ict_price"]),
+            step=step,
+            help="Use the chevrons to fine-tune, or drag the slider.",
+        )
+    with c3:
+        inc = st.button("›", key="ict_price_inc", use_container_width=True)
+
+    # nudge logic (clamped & rounded to 1dp)
+    if dec:
+        st.session_state["ict_price"] = round(max(min_price, st.session_state["ict_price"] - step), 1)
+    if inc:
+        st.session_state["ict_price"] = round(min(max_price, st.session_state["ict_price"] + step), 1)
+
+    # if user dragged the slider, sync session value
+    if sel_price != st.session_state["ict_price"]:
+        st.session_state["ict_price"] = round(float(sel_price), 1)
+
+# Normalize “All” to whatever your core expects
 pos_arg = "ALL" if selected_pos == "All" else selected_pos
+sel_price = st.session_state["ict_price"]
 
-# --- Apply filters
+# --- Apply filters (your existing core.combine_filters)
 filtered = core.combine_filters(pos_arg, sel_price, players_df)
 
-# --- Optional: pagination
+# --- Sort options (optional but handy)
+sort_choice = st.selectbox(
+    "Sort by",
+    ["ICT (desc)", "Pts (desc)", "Val (asc)"],
+    index=0,
+    key="ict_sort_choice",
+)
+if sort_choice == "Pts (desc)":
+    filtered = filtered.sort_values(by="total_points", ascending=False)
+elif sort_choice == "Val (asc)":
+    filtered = filtered.sort_values(by="price_m", ascending=True)
+else:
+    filtered = filtered.sort_values(by="ict_index", ascending=False)
+
+# --- Pagination controls (cleaner; placed below the table later)
 page_size = st.selectbox("Rows per page", [10, 20, 40], index=0, key="ict_page_size")
 total_rows = len(filtered)
 total_pages = max(1, (total_rows + page_size - 1) // page_size)
-
-# Keep page index in session so it doesn't jump around when filtering
 pg_key = "ict_page_index"
 if pg_key not in st.session_state:
     st.session_state[pg_key] = 1
-# If filters change and current page is now out of range, clamp it
+# clamp page if filters shrink results
 st.session_state[pg_key] = max(1, min(st.session_state[pg_key], total_pages))
-
-col_prev, col_page, col_next = st.columns([1,2,1])
-with col_prev:
-    if st.button("◀ Previous", use_container_width=True, disabled=(st.session_state[pg_key] <= 1)):
-        st.session_state[pg_key] -= 1
-with col_page:
-    st.write(f"Page {st.session_state[pg_key]} / {total_pages}")
-with col_next:
-    if st.button("Next ▶", use_container_width=True, disabled=(st.session_state[pg_key] >= total_pages)):
-        st.session_state[pg_key] += 1
 
 start = (st.session_state[pg_key] - 1) * page_size
 end = start + page_size
@@ -324,27 +350,38 @@ display_cols = [
     "price_m", "total_points",
     "ict_index", "influence", "creativity", "threat",
 ]
-page_df = page_df[display_cols]
-
-# --- Pretty column names + number formats
-page_df = page_df.rename(columns={
+page_df = page_df[display_cols].rename(columns={
     "name": "Player", "pos": "Pos", "team_short": "T",
     "price_m": "Val", "total_points": "Pts",
     "ict_index": "ICT", "influence": "Inf", "creativity": "Crt", "threat": "Thr",
 })
 
-# Streamlit’s dataframe formatting
-st.dataframe(
+# --- Professional styling: alignments, bold text cols, gradient on ICT
+styler = (
     page_df.style
-        .format({
-            "Val": "{:.1f}",
-            "ICT": "{:.1f}",
-            "Inf": "{:.1f}",
-            "Crt": "{:.1f}",
-            "Thr": "{:.1f}",
-        })
-        .hide(axis="index"),
-    use_container_width=True,
+        .format({"Val": "{:.1f}", "ICT": "{:.1f}", "Inf": "{:.1f}", "Crt": "{:.1f}", "Thr": "{:.1f}"})
+        .hide(axis="index")
+        .set_table_styles([
+            {"selector": "th", "props": [("text-align", "left"), ("font-weight", "700")]},
+            {"selector": "td", "props": [("padding", "6px 10px")]},
+        ])
+        .set_properties(subset=["Player", "Pos", "T"], **{"font-weight": "600"})
+        .set_properties(subset=["Val", "Pts", "ICT", "Inf", "Crt", "Thr"], **{"text-align": "center"})
+        .background_gradient(subset=["ICT"], cmap="Greens")
 )
 
+st.dataframe(styler, use_container_width=True)
 st.caption(f"Showing {len(page_df)} of {total_rows} matching players.")
+
+# --- Pagination bar (below the table)
+st.divider()
+col_prev, col_page, col_next = st.columns([1, 2, 1])
+with col_prev:
+    if st.button("⬅️ Previous", use_container_width=True, disabled=(st.session_state[pg_key] <= 1)):
+        st.session_state[pg_key] -= 1
+with col_page:
+    st.write(f"Page {st.session_state[pg_key]} / {total_pages}")
+with col_next:
+    if st.button("Next ➡️", use_container_width=True, disabled=(st.session_state[pg_key] >= total_pages)):
+        st.session_state[pg_key] += 1
+
