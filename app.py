@@ -286,7 +286,7 @@ with st.sidebar:
 
     c1, c2, c3 = st.columns([1, 8, 1])
     with c1:
-        dec = st.button("‹", key="ict_price_dec", use_container_width=True)
+        dec = st.button("‹", key="ict_price_dec", width=True)
     with c2:
         sel_price = st.slider(
             "Max Price (£m)",
@@ -297,7 +297,7 @@ with st.sidebar:
             help="Use the chevrons to fine-tune, or drag the slider.",
         )
     with c3:
-        inc = st.button("›", key="ict_price_inc", use_container_width=True)
+        inc = st.button("›", key="ict_price_inc", width=True)
 
     # nudge logic (clamped & rounded to 1dp)
     if dec:
@@ -367,7 +367,7 @@ styler = (
         ])
         .set_properties(subset=["Player", "Pos", "T"], **{"font-weight": "600"})
         .set_properties(subset=["Val", "Pts", "ICT", "Inf", "Crt", "Thr"], **{"text-align": "center"})
-        .background_gradient(subset=["ICT"], cmap="Greens")
+        .background_gradient(subset=["ICT", "Pts"], cmap="Greens")
 )
 
 st.dataframe(styler, use_container_width=True)
