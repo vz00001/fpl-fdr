@@ -157,16 +157,16 @@ with st.sidebar:
     _all = teams_df.sort_values("name")
     id_options = list(map(int, _all["team_id"]))
 
-    # def _fmt_team(tid: int) -> str:
-    #     r = _all.loc[_all["team_id"] == tid].iloc[0]
-    #     return f'{r["name"]} ({r["short"]})'
+    def _fmt_team(tid: int) -> str:
+        r = _all.loc[_all["team_id"] == tid].iloc[0]
+        return f'{r["name"]} ({r["short"]})'
 
-    # visible_ids = st.multiselect(
-    #     "Show teams in ticker:",
-    #     id_options,
-    #     default=id_options,           # all selected by default
-    #     format_func=_fmt_team,
-    # )
+    visible_ids = st.multiselect(
+        "Show teams in ticker:",
+        id_options,
+        default=id_options,           # all selected by default
+        format_func=_fmt_team,
+    )
     # safety: if user deselects everything, fallback to all
     if not visible_ids:
         visible_ids = id_options
