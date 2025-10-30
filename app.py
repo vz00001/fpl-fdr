@@ -279,28 +279,17 @@ with st.sidebar:
     max_price = float(players_df["price_m"].max())
     step = 0.1
 
-    # init once
     if "ict_price" not in st.session_state:
         st.session_state["ict_price"] = round(max_price, 1)
 
+    # --- Nudge buttons (update BEFORE slider is created)
     c1, c2, c3 = st.columns([1, 8, 1])
-
     with c1:
-        dec = st.button("‹", key="ict_price_dec", use_container_width=True)
-    with c2:
-        # Bind the slider directly to session state (no manual sync later)
-        st.slider(
-            "Max Price (£m)",
-            min_value=round(min_price, 1),
-            max_value=round(max_price, 1),
-            step=step,
-            key="ict_price",                   # <-- binding
-            help="Use the chevrons to fine-tune, or drag the slider.",
-        )
+        dec = st.button("‹", key="ict_price_dec", width='stretch')
     with c3:
-        inc = st.button("›", key="ict_price_inc", use_container_width=True)
+        inc = st.button("›", key="ict_price_inc", width='stretch')
 
-    # Nudge buttons: clamp & round, update the same key
+    # Update the session value BEFORE creating the slider
     if dec:
         st.session_state["ict_price"] = round(
             max(min_price, st.session_state["ict_price"] - step), 1
@@ -310,8 +299,19 @@ with st.sidebar:
             min(max_price, st.session_state["ict_price"] + step), 1
         )
 
-    # Use the bound value everywhere else
+    # --- Slider (reads the possibly updated session value)
+    with c2:
+        st.slider(
+            "Max Price (£m)",
+            min_value=round(min_price, 1),
+            max_value=round(max_price, 1),
+            step=step,
+            key="ict_price",  # bound directly
+            help="Use the chevrons to fine-tune, or drag the slider.",
+        )
+
     sel_price = float(st.session_state["ict_price"])
+
 
 
 # Normalize “All” to whatever your core expects
