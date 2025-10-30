@@ -271,6 +271,10 @@ st.caption("Sort players by their ICT Index — the combined measure of Influenc
 with st.sidebar:
     st.header("⚙️ ICT Filters")
 
+    # --- Position chips
+    pos_options = ["All", "GK", "DF", "MF", "FW"]
+    selected_pos = st.segmented_control("By Position", pos_options, default="All")
+
     min_price = float(players_df["price_m"].min())
     max_price = float(players_df["price_m"].max())
     step = 0.1
@@ -282,7 +286,7 @@ with st.sidebar:
     c1, c2, c3 = st.columns([1, 8, 1])
 
     with c1:
-        dec = st.button("‹", key="ict_price_dec", width='stretch')
+        dec = st.button("‹", key="ict_price_dec", use_container_width=True)
     with c2:
         # Bind the slider directly to session state (no manual sync later)
         st.slider(
@@ -294,7 +298,7 @@ with st.sidebar:
             help="Use the chevrons to fine-tune, or drag the slider.",
         )
     with c3:
-        inc = st.button("›", key="ict_price_inc", width='stretch')
+        inc = st.button("›", key="ict_price_inc", use_container_width=True)
 
     # Nudge buttons: clamp & round, update the same key
     if dec:
