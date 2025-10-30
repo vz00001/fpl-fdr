@@ -8,8 +8,8 @@ import requests
 # Fetch (no Streamlit here)
 # ---------------------------
 
-def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Timestamp]:
-    """Fetch teams, fixtures, events from FPL; return dataframes + fetched_at (UTC)."""
+def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.DataFrame]:
+    """Fetch teams, fixtures, events, players from FPL; return dataframes + fetched_at (UTC)."""
     base = "https://fantasy.premierleague.com/api/"
 
     static = requests.get(base + "bootstrap-static/").json()
@@ -26,6 +26,23 @@ def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Times
         ["id", "is_current", "is_next", "finished", "deadline_time"]
     ]
 
+    players_df = pd.DataFrame(static["elements"])[
+        ["id", "web_name", "team", "element_type", "now_cost", "total_points", "influence", "creativity", "threat", "ict_index"]
+    ].rename(columns={
+        "web_name": "name",
+        "team": "team_id",
+        "element_type": "position_id",
+        "now_cost": "price_m"
+    })          
+    players_df["price_m"] = players_df["price_m"] / 10.0
+    players_df["influence"] = players_df["influence"].astype(float)
+    players_df["creativity"] = players_df["creativity"].astype(float)
+    players_df["threat"] = players_df["threat"].astype(float)
+    players_df["ict_index"] = players_df["ict_index"].astype(float)
+    players_df["pos"] = players_df["position_id"].map({1: "GK", 2: "DF", 3: "MF", 4: "FW"})
+    players_df = players_df.merge(teams_df[["team_id", "short"]], on="team_id", how="left").rename(columns={"short": "team_short"})
+    players_df = players_df[["id", "name", "pos", "team_short", "price_m", "total_points", "influence", "creativity", "threat", "ict_index", "team_id", "position_id"]]
+
     fixtures = requests.get(base + "fixtures/").json()
     fx_df = pd.DataFrame(fixtures)
     fx_df = fx_df.loc[fx_df["event"].notna(), [
@@ -34,7 +51,7 @@ def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Times
     fx_df["event"] = fx_df["event"].astype(int)
 
     fetched_at = pd.Timestamp.now(tz="UTC")
-    return teams_df, fx_df, event_df, fetched_at
+    return teams_df, fx_df, event_df, fetched_at, players_df
 
 
 # ---------------------------
@@ -220,32 +237,56 @@ def build_ticker(
 def clamp(n: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, n))
 
+# ---------------------------
+# ICT index helper  
+# ---------------------------
 
 
+def make_position_filter(selected_pos, players_df: pd.DataFrame) -> pd.Series:
+    selected_pos_upper = (selected_pos or "All").upper()
+    if selected_pos_upper == "ALL":
+        return pd.Series([True] * len(players_df), index=players_df.index)
+    else:
+        return pd.Series(players_df['pos'].str.upper().eq(selected_pos_upper), index=players_df.index)
 
+def make_price_filter(max_price, players_df: pd.DataFrame) -> pd.Series:
+    return pd.Series(players_df['price_m'].le(max_price), index=players_df.index)
 
+def combine_filters(selected_pos, max_price, players_df: pd.DataFrame) -> pd.DataFrame:
+    pos_mask = make_position_filter(selected_pos, players_df)
+    price_mask = make_price_filter(max_price, players_df)
+    final_mask = pos_mask & price_mask
+    filtered_players = players_df.loc[final_mask].sort_values(by='ict_index', ascending=False).reset_index(drop=True)
 
+    return filtered_players
 
-# Example usage (you can remove this in production)
-teams_df, fixtures_df, event_df, fetched_at = fetch_fpl_data()
-print(teams_df)
-print(fixtures_df)
-table_df = build_pl_table(teams_df, fixtures_df)
-print(table_df)
-print(table_ratings_fixed(table_df, teams_df))
+# fpl-fdr/quick-test.py
+teams_df, fixtures_df, event_df, fetched_at, players_df = fetch_fpl_data()
+# print(teams_df)
+# print(fixtures_df)
+# print(players_df.head(30))
+print(combine_filters("MF", 5, players_df).head(30))
+# print(make_position_filter("FW", players_df).head(30))
+# print(make_price_filter(6.5, players_df).head(30))
+# print(players_df["team_short"].unique())
+# print(players_df["pos"].value_counts())
+# print(players_df.describe())
+# table_df = build_pl_table(teams_df, fixtures_df)
+# print(table_df)
+# print(table_ratings_fixed(table_df, teams_df))
 
-_all = teams_df.sort_values("name")
-disp_df, val_df = build_ticker(
-    teams=teams_df, 
-    fixtures=fixtures_df, 
-    ratings=table_ratings_fixed(table_df, teams_df),
-    gw_start=int(7), 
-    gw_len=int(5),
-    visible_team_ids=list(map(int, _all["team_id"])),
-    method="Team + Opponent", 
-    w_team=0.25, 
-    w_opp=0.75,
-)
+# _all = teams_df.sort_values("name")
+# disp_df, val_df = build_ticker(
+#     teams=teams_df, 
+#     fixtures=fixtures_df, 
+#     ratings=table_ratings_fixed(table_df, teams_df),
+#     gw_start=int(7), 
+#     gw_len=int(5),
+#     visible_team_ids=list(map(int, _all["team_id"])),
+#     method="Team + Opponent", 
+#     w_team=0.25, 
+#     w_opp=0.75,
+# )
 
-print(disp_df)
-print(val_df)   
+# print(disp_df)
+# print(val_df)   

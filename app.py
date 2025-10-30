@@ -106,10 +106,10 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
 
 
 # --------------------------- App ---------------------------
-st.title("FPL ZINHEV - Fixture Difficulty Rating")
+st.title("FPL - Fixture Difficulty Rating")
 
 with st.spinner("Loading FPL data..."):
-    teams_df, fixtures_df, event_df, fetched_at = load_fpl_data()
+    teams_df, fixtures_df, event_df, fetched_at, players_df = load_fpl_data()
     table_df = core.build_pl_table(teams_df, fixtures_df)
 
 # Session state for ratings
@@ -259,6 +259,92 @@ if fetched_at is not None:
         bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} My Tho time")
     except Exception:
         pass
-src = "Source: FPL fixtures (finished matches only). ^0.4.4"
+src = "Source: FPL fixtures (finished matches only). ^0.5.4"
 tail = " • ".join(bits) + (" • " if bits else "")
 st.caption(f"{tail}{src}")
+
+# ---------- ICTindex: Filters + Table ----------
+
+st.subheader("ICT Index")
+
+# --- Sidebar controls
+with st.sidebar:
+    st.header("ICT Filters")
+
+    # 1) By Position
+    pos_options = ["All", "GK", "DF", "MF", "FW"]
+    selected_pos = st.segmented_control("By Position", pos_options, default="All")
+
+    # 2) Max Price slider
+    min_price = float(players_df["price_m"].min())
+    max_price = float(players_df["price_m"].max())
+    sel_price = st.slider(
+        "Max Price (£m)",
+        min_value=round(min_price, 1),
+        max_value=round(max_price, 1),
+        value=round(max_price, 1),
+        step=0.1,
+    )
+
+# Normalize your “All” to the value your function expects
+pos_arg = "ALL" if selected_pos == "All" else selected_pos
+
+# --- Apply filters
+filtered = core.combine_filters(pos_arg, sel_price, players_df)
+
+# --- Optional: pagination
+page_size = st.selectbox("Rows per page", [25, 50, 100], index=0, key="ict_page_size")
+total_rows = len(filtered)
+total_pages = max(1, (total_rows + page_size - 1) // page_size)
+
+# Keep page index in session so it doesn't jump around when filtering
+pg_key = "ict_page_index"
+if pg_key not in st.session_state:
+    st.session_state[pg_key] = 1
+# If filters change and current page is now out of range, clamp it
+st.session_state[pg_key] = max(1, min(st.session_state[pg_key], total_pages))
+
+col_prev, col_page, col_next = st.columns([1,2,1])
+with col_prev:
+    if st.button("◀ Previous", use_container_width=True, disabled=(st.session_state[pg_key] <= 1)):
+        st.session_state[pg_key] -= 1
+with col_page:
+    st.write(f"Page {st.session_state[pg_key]} / {total_pages}")
+with col_next:
+    if st.button("Next ▶", use_container_width=True, disabled=(st.session_state[pg_key] >= total_pages)):
+        st.session_state[pg_key] += 1
+
+start = (st.session_state[pg_key] - 1) * page_size
+end = start + page_size
+page_df = filtered.iloc[start:end].copy()
+
+# --- Shape for display (don’t expose internal ids unless you want to)
+display_cols = [
+    "name", "pos", "team_short",
+    "price_m", "total_points",
+    "ict_index", "influence", "creativity", "threat",
+]
+page_df = page_df[display_cols]
+
+# --- Pretty column names + number formats
+page_df = page_df.rename(columns={
+    "name": "Player", "pos": "Pos", "team_short": "T",
+    "price_m": "Val", "total_points": "Pts",
+    "ict_index": "ICT", "influence": "Inf", "creativity": "Crt", "threat": "Thr",
+})
+
+# Streamlit’s dataframe formatting
+st.dataframe(
+    page_df.style
+        .format({
+            "Val": "{:.1f}",
+            "ICT": "{:.1f}",
+            "Inf": "{:.1f}",
+            "Crt": "{:.1f}",
+            "Thr": "{:.1f}",
+        })
+        .hide(axis="index"),
+    use_container_width=True,
+)
+
+st.caption(f"Showing {len(page_df)} of {total_rows} matching players.")

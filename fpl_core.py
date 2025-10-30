@@ -26,6 +26,23 @@ def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Times
         ["id", "is_current", "is_next", "finished", "deadline_time"]
     ]
 
+    players_df = pd.DataFrame(static["elements"])[
+        ["id", "web_name", "team", "element_type", "now_cost", "total_points", "influence", "creativity", "threat", "ict_index"]
+    ].rename(columns={
+        "web_name": "name",
+        "team": "team_id",
+        "element_type": "position_id",
+        "now_cost": "price_m"
+    })          
+    players_df["price_m"] = players_df["price_m"] / 10.0
+    players_df["influence"] = players_df["influence"].astype(float)
+    players_df["creativity"] = players_df["creativity"].astype(float)
+    players_df["threat"] = players_df["threat"].astype(float)
+    players_df["ict_index"] = players_df["ict_index"].astype(float)
+    players_df["pos"] = players_df["position_id"].map({1: "GK", 2: "DF", 3: "MF", 4: "FW"})
+    players_df = players_df.merge(teams_df[["team_id", "short"]], on="team_id", how="left").rename(columns={"short": "team_short"})
+    players_df = players_df[["id", "name", "pos", "team_short", "price_m", "total_points", "influence", "creativity", "threat", "ict_index", "team_id", "position_id"]]
+
     fixtures = requests.get(base + "fixtures/").json()
     fx_df = pd.DataFrame(fixtures)
     fx_df = fx_df.loc[fx_df["event"].notna(), [
@@ -217,3 +234,26 @@ def build_ticker(
 
 def clamp(n: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, n))
+
+
+# ---------------------------
+# ICT index helper  
+# ---------------------------
+
+def make_position_filter(selected_pos, players_df: pd.DataFrame) -> pd.Series:
+    selected_pos_upper = (selected_pos or "All").upper()
+    if selected_pos_upper == "ALL":
+        return pd.Series([True] * len(players_df), index=players_df.index)
+    else:
+        return pd.Series(players_df['pos'].str.upper().eq(selected_pos_upper), index=players_df.index)
+
+def make_price_filter(max_price, players_df: pd.DataFrame) -> pd.Series:
+    return pd.Series(players_df['price_m'].le(max_price), index=players_df.index)
+
+def combine_filters(selected_pos, max_price, players_df: pd.DataFrame) -> pd.DataFrame:
+    pos_mask = make_position_filter(selected_pos, players_df)
+    price_mask = make_price_filter(max_price, players_df)
+    final_mask = pos_mask & price_mask
+    filtered_players = players_df.loc[final_mask].sort_values(by='ict_index', ascending=False).reset_index(drop=True)
+
+    return filtered_players
