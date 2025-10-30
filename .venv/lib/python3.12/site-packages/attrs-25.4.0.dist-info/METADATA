@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: attrs
-Version: 25.3.0
+Version: 25.4.0
 Summary: Classes Without Boilerplate
 Project-URL: Documentation, https://www.attrs.org/
 Project-URL: Changelog, https://www.attrs.org/en/stable/changelog.html
@@ -12,62 +12,16 @@ License-Expression: MIT
 License-File: LICENSE
 Keywords: attribute,boilerplate,class
 Classifier: Development Status :: 5 - Production/Stable
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Typing :: Typed
-Requires-Python: >=3.8
-Provides-Extra: benchmark
-Requires-Dist: cloudpickle; (platform_python_implementation == 'CPython') and extra == 'benchmark'
-Requires-Dist: hypothesis; extra == 'benchmark'
-Requires-Dist: mypy>=1.11.1; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'benchmark'
-Requires-Dist: pympler; extra == 'benchmark'
-Requires-Dist: pytest-codspeed; extra == 'benchmark'
-Requires-Dist: pytest-mypy-plugins; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'benchmark'
-Requires-Dist: pytest-xdist[psutil]; extra == 'benchmark'
-Requires-Dist: pytest>=4.3.0; extra == 'benchmark'
-Provides-Extra: cov
-Requires-Dist: cloudpickle; (platform_python_implementation == 'CPython') and extra == 'cov'
-Requires-Dist: coverage[toml]>=5.3; extra == 'cov'
-Requires-Dist: hypothesis; extra == 'cov'
-Requires-Dist: mypy>=1.11.1; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'cov'
-Requires-Dist: pympler; extra == 'cov'
-Requires-Dist: pytest-mypy-plugins; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'cov'
-Requires-Dist: pytest-xdist[psutil]; extra == 'cov'
-Requires-Dist: pytest>=4.3.0; extra == 'cov'
-Provides-Extra: dev
-Requires-Dist: cloudpickle; (platform_python_implementation == 'CPython') and extra == 'dev'
-Requires-Dist: hypothesis; extra == 'dev'
-Requires-Dist: mypy>=1.11.1; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'dev'
-Requires-Dist: pre-commit-uv; extra == 'dev'
-Requires-Dist: pympler; extra == 'dev'
-Requires-Dist: pytest-mypy-plugins; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'dev'
-Requires-Dist: pytest-xdist[psutil]; extra == 'dev'
-Requires-Dist: pytest>=4.3.0; extra == 'dev'
-Provides-Extra: docs
-Requires-Dist: cogapp; extra == 'docs'
-Requires-Dist: furo; extra == 'docs'
-Requires-Dist: myst-parser; extra == 'docs'
-Requires-Dist: sphinx; extra == 'docs'
-Requires-Dist: sphinx-notfound-page; extra == 'docs'
-Requires-Dist: sphinxcontrib-towncrier; extra == 'docs'
-Requires-Dist: towncrier; extra == 'docs'
-Provides-Extra: tests
-Requires-Dist: cloudpickle; (platform_python_implementation == 'CPython') and extra == 'tests'
-Requires-Dist: hypothesis; extra == 'tests'
-Requires-Dist: mypy>=1.11.1; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'tests'
-Requires-Dist: pympler; extra == 'tests'
-Requires-Dist: pytest-mypy-plugins; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'tests'
-Requires-Dist: pytest-xdist[psutil]; extra == 'tests'
-Requires-Dist: pytest>=4.3.0; extra == 'tests'
-Provides-Extra: tests-mypy
-Requires-Dist: mypy>=1.11.1; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'tests-mypy'
-Requires-Dist: pytest-mypy-plugins; (platform_python_implementation == 'CPython' and python_version >= '3.10') and extra == 'tests-mypy'
+Requires-Python: >=3.9
 Description-Content-Type: text/markdown
 
 <p align="center">
@@ -78,7 +32,7 @@ Description-Content-Type: text/markdown
 
 
 *attrs* is the Python package that will bring back the **joy** of **writing classes** by relieving you from the drudgery of implementing object protocols (aka [dunder methods](https://www.attrs.org/en/latest/glossary.html#term-dunder-methods)).
-[Trusted by NASA](https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-github-profile/customizing-your-profile/personalizing-your-profile#list-of-qualifying-repositories-for-mars-2020-helicopter-contributor-achievement) for Mars missions since 2020!
+Trusted by NASA for [Mars missions since 2020](https://github.com/readme/featured/nasa-ingenuity-helicopter)!
 
 Its main goal is to help you to write **concise** and **correct** software without slowing down your code.
 
@@ -96,15 +50,13 @@ Especially those generously supporting us at the *The Organization* tier and hig
 import pathlib, tomllib
 
 for sponsor in tomllib.loads(pathlib.Path("pyproject.toml").read_text())["tool"]["sponcon"]["sponsors"]:
-      print(f'<a href="{sponsor["url"]}"><img title="{sponsor["title"]}" src="https://www.attrs.org/en/25.3.0/_static/sponsors/{sponsor["img"]}" width="190" /></a>')
+      print(f'<a href="{sponsor["url"]}"><img title="{sponsor["title"]}" src="https://www.attrs.org/en/25.4.0/_static/sponsors/{sponsor["img"]}" width="190" /></a>')
 ]]] -->
-<a href="https://www.variomedia.de/"><img title="Variomedia AG" src="https://www.attrs.org/en/25.3.0/_static/sponsors/Variomedia.svg" width="190" /></a>
-<a href="https://tidelift.com/?utm_source=lifter&utm_medium=referral&utm_campaign=hynek"><img title="Tidelift" src="https://www.attrs.org/en/25.3.0/_static/sponsors/Tidelift.svg" width="190" /></a>
-<a href="https://klaviyo.com/"><img title="Klaviyo" src="https://www.attrs.org/en/25.3.0/_static/sponsors/Klaviyo.svg" width="190" /></a>
-<a href="https://privacy-solutions.org/"><img title="Privacy Solutions" src="https://www.attrs.org/en/25.3.0/_static/sponsors/Privacy-Solutions.svg" width="190" /></a>
-<a href="https://www.emsys-renewables.com/"><img title="emsys renewables" src="https://www.attrs.org/en/25.3.0/_static/sponsors/emsys-renewables.svg" width="190" /></a>
-<a href="https://filepreviews.io/"><img title="FilePreviews" src="https://www.attrs.org/en/25.3.0/_static/sponsors/FilePreviews.svg" width="190" /></a>
-<a href="https://polar.sh/"><img title="Polar" src="https://www.attrs.org/en/25.3.0/_static/sponsors/Polar.svg" width="190" /></a>
+<a href="https://www.variomedia.de/"><img title="Variomedia AG" src="https://www.attrs.org/en/25.4.0/_static/sponsors/Variomedia.svg" width="190" /></a>
+<a href="https://tidelift.com/?utm_source=lifter&utm_medium=referral&utm_campaign=hynek"><img title="Tidelift" src="https://www.attrs.org/en/25.4.0/_static/sponsors/Tidelift.svg" width="190" /></a>
+<a href="https://privacy-solutions.org/"><img title="Privacy Solutions" src="https://www.attrs.org/en/25.4.0/_static/sponsors/Privacy-Solutions.svg" width="190" /></a>
+<a href="https://filepreviews.io/"><img title="FilePreviews" src="https://www.attrs.org/en/25.4.0/_static/sponsors/FilePreviews.svg" width="190" /></a>
+<a href="https://polar.sh/"><img title="Polar" src="https://www.attrs.org/en/25.4.0/_static/sponsors/Polar.svg" width="190" /></a>
 <!-- [[[end]]] -->
 
 </p>
@@ -220,10 +172,61 @@ Save time, reduce risk, and improve code health, while paying the maintainers of
 
 ## Release Information
 
+### Backwards-incompatible Changes
+
+- Class-level `kw_only=True` behavior is now consistent with `dataclasses`.
+
+  Previously, a class that sets `kw_only=True` makes all attributes keyword-only, including those from base classes.
+  If an attribute sets `kw_only=False`, that setting is ignored, and it is still made keyword-only.
+
+  Now, only the attributes defined in that class that doesn't explicitly set `kw_only=False` are made keyword-only.
+
+  This shouldn't be a problem for most users, unless you have a pattern like this:
+
+  ```python
+  @attrs.define(kw_only=True)
+  class Base:
+      a: int
+      b: int = attrs.field(default=1, kw_only=False)
+
+  @attrs.define
+  class Subclass(Base):
+      c: int
+  ```
+
+  Here, we have a `kw_only=True` *attrs* class (`Base`) with an attribute that sets `kw_only=False` and has a default (`Base.b`), and then create a subclass (`Subclass`) with required arguments (`Subclass.c`).
+  Previously this would work, since it would make `Base.b` keyword-only, but now this fails since `Base.b` is positional, and we have a required positional argument (`Subclass.c`) following another argument with defaults.
+  [#1457](https://github.com/python-attrs/attrs/issues/1457)
+
+
 ### Changes
 
-- Restore support for generator-based `field_transformer`s.
-  [#1417](https://github.com/python-attrs/attrs/issues/1417)
+- Values passed to the `__init__()` method of `attrs` classes are now correctly passed to `__attrs_pre_init__()` instead of their default values (in cases where *kw_only* was not specified).
+  [#1427](https://github.com/python-attrs/attrs/issues/1427)
+- Added support for Python 3.14 and [PEP 749](https://peps.python.org/pep-0749/).
+  [#1446](https://github.com/python-attrs/attrs/issues/1446),
+  [#1451](https://github.com/python-attrs/attrs/issues/1451)
+- `attrs.validators.deep_mapping()` now allows to leave out either *key_validator* xor *value_validator*.
+  [#1448](https://github.com/python-attrs/attrs/issues/1448)
+- `attrs.validators.deep_iterator()` and `attrs.validators.deep_mapping()` now accept lists and tuples for all validators and wrap them into a `attrs.validators.and_()`.
+  [#1449](https://github.com/python-attrs/attrs/issues/1449)
+- Added a new **experimental** way to inspect classes:
+
+  `attrs.inspect(cls)` returns the _effective_ class-wide parameters that were used by *attrs* to construct the class.
+
+  The returned class is the same data structure that *attrs* uses internally to decide how to construct the final class.
+  [#1454](https://github.com/python-attrs/attrs/issues/1454)
+- Fixed annotations for `attrs.field(converter=...)`.
+  Previously, a `tuple` of converters was only accepted if it had exactly one element.
+  [#1461](https://github.com/python-attrs/attrs/issues/1461)
+- The performance of `attrs.asdict()` has been improved by 45–260%.
+  [#1463](https://github.com/python-attrs/attrs/issues/1463)
+- The performance of `attrs.astuple()` has been improved by 49–270%.
+  [#1469](https://github.com/python-attrs/attrs/issues/1469)
+- The type annotation for `attrs.validators.or_()` now allows for different types of validators.
+
+  This was only an issue on Pyright.
+  [#1474](https://github.com/python-attrs/attrs/issues/1474)
 
 
 

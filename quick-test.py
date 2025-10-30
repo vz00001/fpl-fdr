@@ -2,17 +2,31 @@
 from typing import Dict, Tuple, List
 import numpy as np
 import pandas as pd
+# fpl_core.py
 import requests
+from requests.adapters import HTTPAdapter, Retry
+import streamlit as st
+
+@st.cache_resource
+def http_session() -> requests.Session:
+    s = requests.Session()
+    retries = Retry(
+        total=3, backoff_factor=0.2,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=("GET",)
+    )
+    s.mount("https://", HTTPAdapter(max_retries=retries))
+    s.headers.update({"User-Agent": "FPL-FDR/1.0 (+streamlit)"})
+    return s
 
 # ---------------------------
-# Fetch (no Streamlit here)
+# Fetching FPL data
 # ---------------------------
-
+BASE = "https://fantasy.premierleague.com/api/"
 def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.DataFrame]:
     """Fetch teams, fixtures, events, players from FPL; return dataframes + fetched_at (UTC)."""
-    base = "https://fantasy.premierleague.com/api/"
 
-    static = requests.get(base + "bootstrap-static/").json()
+    static = http_session().get(BASE + "bootstrap-static/").json()
     teams_df = pd.DataFrame(static["teams"])[
         ["id", "name", "short_name", "strength_overall_home", "strength_overall_away"]
     ].rename(columns={
@@ -43,7 +57,7 @@ def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Times
     players_df = players_df.merge(teams_df[["team_id", "short"]], on="team_id", how="left").rename(columns={"short": "team_short"})
     players_df = players_df[["id", "name", "pos", "team_short", "price_m", "total_points", "influence", "creativity", "threat", "ict_index", "team_id", "position_id"]]
 
-    fixtures = requests.get(base + "fixtures/").json()
+    fixtures = http_session().get(BASE + "fixtures/").json()
     fx_df = pd.DataFrame(fixtures)
     fx_df = fx_df.loc[fx_df["event"].notna(), [
         "event", "team_h", "team_a", "finished", "kickoff_time", "team_h_score", "team_a_score"
@@ -51,7 +65,27 @@ def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Times
     fx_df["event"] = fx_df["event"].astype(int)
 
     fetched_at = pd.Timestamp.now(tz="UTC")
+
     return teams_df, fx_df, event_df, fetched_at, players_df
+
+@st.cache_data(ttl=3600)
+def _fetch_player_history_json(player_id: int) -> dict:
+    r = http_session().get().get(f"{BASE}element-summary/{player_id}/", timeout=20)
+    r.raise_for_status()
+    return r.json()
+
+@st.cache_data(ttl=3600)
+def fetch_player_history(player_id: int) -> pd.DataFrame:
+    data = _fetch_player_history_json(player_id)
+    hist = pd.DataFrame(data.get("history", []))
+    if hist.empty:
+        return pd.DataFrame(columns=["round","kickoff_time","total_points","influence","creativity","threat","ict_index","minutes"])
+    keep = ["round","kickoff_time","total_points","influence","creativity","threat","ict_index","minutes"]
+    hist = hist[keep].copy()
+    hist["kickoff_time"] = pd.to_datetime(hist["kickoff_time"], utc=True, errors="coerce")
+    for c in ["total_points","influence","creativity","threat","ict_index","minutes"]:
+        hist[c] = pd.to_numeric(hist[c], errors="coerce").fillna(0.0)
+    return hist.sort_values("round", ascending=False, kind="mergesort").reset_index(drop=True)
 
 
 # ---------------------------
@@ -260,12 +294,87 @@ def combine_filters(selected_pos, max_price, players_df: pd.DataFrame) -> pd.Dat
 
     return filtered_players
 
+def aggregate_last_n(history_df: pd.DataFrame, n: int, *, exclude_zero_min=True) -> Dict[str, float]:
+    if history_df.empty:
+        return {"total_points":0.0, "influence":0.0, "creativity":0.0, "threat":0.0, "ict_index":0.0}
+    df = history_df
+    if exclude_zero_min and "minutes" in df.columns:
+        df = df[df["minutes"] > 0]
+    n = int(max(1, min(n, len(df))))
+    recent = df.head(n)
+    return {
+        "total_points": float(recent["total_points"].sum()),
+        "influence": float(recent["influence"].sum()),
+        "creativity": float(recent["creativity"].sum()),
+        "threat": float(recent["threat"].sum()),
+        "ict_index": float(recent["ict_index"].sum()),
+    }
+
+@st.cache_data(ttl=3600)
+def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = True) -> Dict[str, float]:
+    df = fetch_player_history(player_id)
+    if exclude_zero_min and "minutes" in df.columns:
+        df = df[df["minutes"] > 0]
+    if df.empty:
+        return {"total_points":0.0,"influence":0.0,"creativity":0.0,"threat":0.0,"ict_index":0.0}
+    n = int(max(1, min(n, len(df))))
+    recent = df.head(n)
+    return {
+        "total_points": float(recent["total_points"].sum()),
+        "influence": float(recent["influence"].sum()),
+        "creativity": float(recent["creativity"].sum()),
+        "threat": float(recent["threat"].sum()),
+        "ict_index": float(recent["ict_index"].sum()),
+    }
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
+    ids = list(players_df_slice["id"])
+
+    rows: List[Dict[str, float]] = []
+    # keep workers modest to be polite to the API
+    max_workers = min(8, max(1, len(ids)))
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {ex.submit(rolling_ict_for_player, pid, n): pid for pid in ids}
+        for fut in as_completed(futures):
+            pid = futures[fut]
+            try:
+                agg = fut.result()
+            except Exception:
+                # fail-safe: return zeros for this player if anything goes wrong
+                agg = {"total_points":0.0,"influence":0.0,"creativity":0.0,"threat":0.0,"ict_index":0.0}
+            agg["id"] = pid
+            rows.append(agg)
+
+    agg_df = pd.DataFrame(rows)
+    for c in ["total_points","influence","creativity","threat","ict_index"]:
+        agg_df[c] = pd.to_numeric(agg_df[c], errors="coerce").fillna(0.0)
+
+    base = players_df_slice[["id","name","pos","team_short","price_m"]].copy()
+    joined = base.merge(agg_df, on="id", how="left")
+    joined[["total_points","influence","creativity","threat","ict_index"]] = \
+        joined[["total_points","influence","creativity","threat","ict_index"]].fillna(0.0)
+
+    return joined.sort_values("ict_index", ascending=False, kind="mergesort").reset_index(drop=True)
+
+
+
+
+
+
+
+
+
+
+
+
 # fpl-fdr/quick-test.py
 teams_df, fixtures_df, event_df, fetched_at, players_df = fetch_fpl_data()
 # print(teams_df)
 # print(fixtures_df)
 # print(players_df.head(30))
-print(combine_filters("MF", 5, players_df).head(30))
+print(apply_rolling(combine_filters("MF", 7.5, players_df), 5).head(10))
 # print(make_position_filter("FW", players_df).head(30))
 # print(make_price_filter(6.5, players_df).head(30))
 # print(players_df["team_short"].unique())
