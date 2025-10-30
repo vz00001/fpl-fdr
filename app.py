@@ -271,43 +271,44 @@ st.caption("Sort players by their ICT Index — the combined measure of Influenc
 with st.sidebar:
     st.header("⚙️ ICT Filters")
 
-    # --- Position chips
-    pos_options = ["All", "GK", "DF", "MF", "FW"]
-    selected_pos = st.segmented_control("By Position", pos_options, default="All")
-
-    # --- Price row: <  [ slider ]  >
     min_price = float(players_df["price_m"].min())
     max_price = float(players_df["price_m"].max())
     step = 0.1
 
-    # keep slider value in session (so buttons & slider stay in sync)
+    # init once
     if "ict_price" not in st.session_state:
         st.session_state["ict_price"] = round(max_price, 1)
 
     c1, c2, c3 = st.columns([1, 8, 1])
+
     with c1:
         dec = st.button("‹", key="ict_price_dec", width='stretch')
     with c2:
-        sel_price = st.slider(
+        # Bind the slider directly to session state (no manual sync later)
+        st.slider(
             "Max Price (£m)",
             min_value=round(min_price, 1),
             max_value=round(max_price, 1),
-            value=float(st.session_state["ict_price"]),
             step=step,
+            key="ict_price",                   # <-- binding
             help="Use the chevrons to fine-tune, or drag the slider.",
         )
     with c3:
         inc = st.button("›", key="ict_price_inc", width='stretch')
 
-    # nudge logic (clamped & rounded to 1dp)
+    # Nudge buttons: clamp & round, update the same key
     if dec:
-        st.session_state["ict_price"] = round(max(min_price, st.session_state["ict_price"] - step), 1)
+        st.session_state["ict_price"] = round(
+            max(min_price, st.session_state["ict_price"] - step), 1
+        )
     if inc:
-        st.session_state["ict_price"] = round(min(max_price, st.session_state["ict_price"] + step), 1)
+        st.session_state["ict_price"] = round(
+            min(max_price, st.session_state["ict_price"] + step), 1
+        )
 
-    # if user dragged the slider, sync session value
-    if sel_price != st.session_state["ict_price"]:
-        st.session_state["ict_price"] = round(float(sel_price), 1)
+    # Use the bound value everywhere else
+    sel_price = float(st.session_state["ict_price"])
+
 
 # Normalize “All” to whatever your core expects
 pos_arg = "ALL" if selected_pos == "All" else selected_pos
