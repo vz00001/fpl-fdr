@@ -8,8 +8,8 @@ import requests
 # Fetch (no Streamlit here)
 # ---------------------------
 
-def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Timestamp]:
-    """Fetch teams, fixtures, events from FPL; return dataframes + fetched_at (UTC)."""
+def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.DataFrame]:
+    """Fetch teams, fixtures, events, players from FPL; return dataframes + fetched_at (UTC)."""
     base = "https://fantasy.premierleague.com/api/"
 
     static = requests.get(base + "bootstrap-static/").json()
