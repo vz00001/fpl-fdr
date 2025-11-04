@@ -372,8 +372,8 @@ styler = (
         ])
         .set_properties(subset=["Player", "Pos", "T"], **{"font-weight": "600"})
         .set_properties(subset=["Val", "Pts", "ICT", "Inf", "Crt", "Thr"], **{"text-align": "center"})
-        .background_gradient(subset=["ICT", "Pts"], cmap="Greens")
-        .background_gradient(subset=["Inf", "Crt", "Thr"], cmap="Purples")
+        .background_gradient(subset=["ICT", "Pts"], cmap="Purples")
+        .background_gradient(subset=["Inf", "Crt", "Thr"], cmap="Greens")
 )
 
 st.dataframe(styler, width='stretch')
