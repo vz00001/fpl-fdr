@@ -70,7 +70,7 @@ def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Times
 
 @st.cache_data(ttl=3600)
 def _fetch_player_history_json(player_id: int) -> dict:
-    r = http_session().get().get(f"{BASE}element-summary/{player_id}/", timeout=20)
+    r = http_session().get(f"{BASE}element-summary/{player_id}/", timeout=20)
     r.raise_for_status()
     return r.json()
 
@@ -275,7 +275,6 @@ def clamp(n: int, lo: int, hi: int) -> int:
 # ICT index helper  
 # ---------------------------
 
-
 def make_position_filter(selected_pos, players_df: pd.DataFrame) -> pd.Series:
     selected_pos_upper = (selected_pos or "All").upper()
     if selected_pos_upper == "ALL":
@@ -294,21 +293,21 @@ def combine_filters(selected_pos, max_price, players_df: pd.DataFrame) -> pd.Dat
 
     return filtered_players
 
-def aggregate_last_n(history_df: pd.DataFrame, n: int, *, exclude_zero_min=True) -> Dict[str, float]:
-    if history_df.empty:
-        return {"total_points":0.0, "influence":0.0, "creativity":0.0, "threat":0.0, "ict_index":0.0}
-    df = history_df
-    if exclude_zero_min and "minutes" in df.columns:
-        df = df[df["minutes"] > 0]
-    n = int(max(1, min(n, len(df))))
-    recent = df.head(n)
-    return {
-        "total_points": float(recent["total_points"].sum()),
-        "influence": float(recent["influence"].sum()),
-        "creativity": float(recent["creativity"].sum()),
-        "threat": float(recent["threat"].sum()),
-        "ict_index": float(recent["ict_index"].sum()),
-    }
+# def aggregate_last_n(history_df: pd.DataFrame, n: int, *, exclude_zero_min=True) -> Dict[str, float]:
+#     if history_df.empty:
+#         return {"total_points":0.0, "influence":0.0, "creativity":0.0, "threat":0.0, "ict_index":0.0}
+#     df = history_df
+#     if exclude_zero_min and "minutes" in df.columns:
+#         df = df[df["minutes"] > 0]
+#     n = int(max(1, min(n, len(df))))
+#     recent = df.head(n)
+#     return {
+#         "total_points": float(recent["total_points"].sum()),
+#         "influence": float(recent["influence"].sum()),
+#         "creativity": float(recent["creativity"].sum()),
+#         "threat": float(recent["threat"].sum()),
+#         "ict_index": float(recent["ict_index"].sum()),
+#     }
 
 @st.cache_data(ttl=3600)
 def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = True) -> Dict[str, float]:
@@ -328,7 +327,6 @@ def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = True
     }
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
 def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
     ids = list(players_df_slice["id"])
 
@@ -343,7 +341,7 @@ def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
                 agg = fut.result()
             except Exception:
                 # fail-safe: return zeros for this player if anything goes wrong
-                agg = {"total_points":0.0,"influence":0.0,"creativity":0.0,"threat":0.0,"ict_index":0.0}
+                agg = {"total_points":0.0, "influence":0.0, "creativity":0.0, "threat":0.0, "ict_index":0.0}
             agg["id"] = pid
             rows.append(agg)
 
@@ -371,31 +369,5 @@ def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
 
 # fpl-fdr/quick-test.py
 teams_df, fixtures_df, event_df, fetched_at, players_df = fetch_fpl_data()
-# print(teams_df)
-# print(fixtures_df)
-# print(players_df.head(30))
-print(apply_rolling(combine_filters("MF", 7.5, players_df), 5).head(10))
-# print(make_position_filter("FW", players_df).head(30))
-# print(make_price_filter(6.5, players_df).head(30))
-# print(players_df["team_short"].unique())
-# print(players_df["pos"].value_counts())
-# print(players_df.describe())
-# table_df = build_pl_table(teams_df, fixtures_df)
-# print(table_df)
-# print(table_ratings_fixed(table_df, teams_df))
-
-# _all = teams_df.sort_values("name")
-# disp_df, val_df = build_ticker(
-#     teams=teams_df, 
-#     fixtures=fixtures_df, 
-#     ratings=table_ratings_fixed(table_df, teams_df),
-#     gw_start=int(7), 
-#     gw_len=int(5),
-#     visible_team_ids=list(map(int, _all["team_id"])),
-#     method="Team + Opponent", 
-#     w_team=0.25, 
-#     w_opp=0.75,
-# )
-
-# print(disp_df)
-# print(val_df)   
+# print(fetch_player_history(1))
+print(apply_rolling(combine_filters("FW", 5, players_df), 5).head(10))

@@ -69,7 +69,7 @@ def fetch_fpl_data() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Times
 
 @st.cache_data(ttl=3600)
 def _fetch_player_history_json(player_id: int) -> dict:
-    r = http_session().get().get(f"{BASE}element-summary/{player_id}/", timeout=20)
+    r = http_session().get(f"{BASE}element-summary/{player_id}/", timeout=20)
     r.raise_for_status()
     return r.json()
 
@@ -290,24 +290,24 @@ def combine_filters(selected_pos, max_price, players_df: pd.DataFrame) -> pd.Dat
 
     return filtered_players
 
-def aggregate_last_n(history_df: pd.DataFrame, n: int, *, exclude_zero_min=True) -> Dict[str, float]:
-    if history_df.empty:
-        return {"total_points":0.0, "influence":0.0, "creativity":0.0, "threat":0.0, "ict_index":0.0}
-    df = history_df
-    if exclude_zero_min and "minutes" in df.columns:
-        df = df[df["minutes"] > 0]
-    n = int(max(1, min(n, len(df))))
-    recent = df.head(n)
-    return {
-        "total_points": float(recent["total_points"].sum()),
-        "influence": float(recent["influence"].sum()),
-        "creativity": float(recent["creativity"].sum()),
-        "threat": float(recent["threat"].sum()),
-        "ict_index": float(recent["ict_index"].sum()),
-    }
+# def aggregate_last_n(history_df: pd.DataFrame, n: int, *, exclude_zero_min=True) -> Dict[str, float]:
+#     if history_df.empty:
+#         return {"total_points":0.0, "influence":0.0, "creativity":0.0, "threat":0.0, "ict_index":0.0}
+#     df = history_df
+#     if exclude_zero_min and "minutes" in df.columns:
+#         df = df[df["minutes"] > 0]
+#     n = int(max(1, min(n, len(df))))
+#     recent = df.head(n)
+#     return {
+#         "total_points": float(recent["total_points"].sum()),
+#         "influence": float(recent["influence"].sum()),
+#         "creativity": float(recent["creativity"].sum()),
+#         "threat": float(recent["threat"].sum()),
+#         "ict_index": float(recent["ict_index"].sum()),
+#     }
 
 @st.cache_data(ttl=3600)
-def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = True) -> Dict[str, float]:
+def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = False) -> Dict[str, float]:
     df = fetch_player_history(player_id)
     if exclude_zero_min and "minutes" in df.columns:
         df = df[df["minutes"] > 0]
@@ -324,7 +324,6 @@ def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = True
     }
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
 def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
     ids = list(players_df_slice["id"])
 
