@@ -338,7 +338,7 @@ def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
                 agg = fut.result()
             except Exception:
                 # fail-safe: return zeros for this player if anything goes wrong
-                agg = {"total_points":0.0,"influence":0.0,"creativity":0.0,"threat":0.0,"ict_index":0.0}
+                agg = {"total_points":0.0, "influence":0.0, "creativity":0.0, "threat":0.0, "ict_index":0.0}
             agg["id"] = pid
             rows.append(agg)
 
@@ -352,3 +352,8 @@ def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
         joined[["total_points","influence","creativity","threat","ict_index"]].fillna(0.0)
 
     return joined.sort_values("ict_index", ascending=False, kind="mergesort").reset_index(drop=True)
+
+# fpl-fdr/quick-test.py
+teams_df, fixtures_df, event_df, fetched_at, players_df = fetch_fpl_data()
+# print(fetch_player_history(1))
+print(apply_rolling(combine_filters("DF", 7, players_df), 5).head(20))

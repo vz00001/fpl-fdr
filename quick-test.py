@@ -310,7 +310,7 @@ def combine_filters(selected_pos, max_price, players_df: pd.DataFrame) -> pd.Dat
 #     }
 
 @st.cache_data(ttl=3600)
-def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = True) -> Dict[str, float]:
+def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = False) -> Dict[str, float]:
     df = fetch_player_history(player_id)
     if exclude_zero_min and "minutes" in df.columns:
         df = df[df["minutes"] > 0]
@@ -370,4 +370,7 @@ def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
 # fpl-fdr/quick-test.py
 teams_df, fixtures_df, event_df, fetched_at, players_df = fetch_fpl_data()
 # print(fetch_player_history(1))
-print(apply_rolling(combine_filters("FW", 5, players_df), 5).head(10))
+
+print(apply_rolling(combine_filters("DF", 22, players_df), 5).head(80), "\n")
+
+print(apply_rolling(combine_filters("All", 22, players_df), 5).head(80), "\n")
