@@ -278,9 +278,6 @@ with st.sidebar:
     min_price = float(players_df["price_m"].min())
     max_price = float(players_df["price_m"].max())
     step = 0.1
-    min_games = 1
-    max_games = int(current_gw) - 1
-    step_games = 1
 
     if "previous_games" not in st.session_state:
         st.session_state["previous_games"] = max_games
@@ -318,38 +315,83 @@ with st.sidebar:
 
     sel_price = float(st.session_state["ict_price"])
 
-    # --- Nudge buttons for over previous gameweek
+with st.sidebar:
+    st.header("⚙️ ICT Filters")
+
+    # --- Position chips
+    pos_options = ["All", "GK", "DF", "MF", "FW"]
+    selected_pos = st.segmented_control("By Position", pos_options, default="All")
+
+    # --- Price slider + chevrons
+    min_price = float(players_df["price_m"].min())
+    max_price = float(players_df["price_m"].max())
+    step = 0.1
+
+    if "ict_price" not in st.session_state:
+        st.session_state["ict_price"] = round(max_price, 1)
+
     c1, c2, c3 = st.columns([2, 7, 2])
     with c1:
-        dec = st.button("‹", key="gw_dec", width='stretch')
+        dec_price = st.button("‹", key="ict_price_dec", width="stretch")
     with c3:
-        inc = st.button("›", key="gw_inc", width='stretch')
+        inc_price = st.button("›", key="ict_price_inc", width="stretch")
 
-    # Update the session value BEFORE creating the slider
-    if dec:
-        st.session_state["previous_games"] = max(min_games, st.session_state["previous_games"] - step_games)
-    if inc:
-        st.session_state["previous_games"] = min(max_games, st.session_state["previous_games"] + step_games)
+    if dec_price:
+        st.session_state["ict_price"] = round(max(min_price, st.session_state["ict_price"] - step), 1)
+    if inc_price:
+        st.session_state["ict_price"] = round(min(max_price, st.session_state["ict_price"] + step), 1)
 
-    # --- Slider (reads the possibly updated session value)
     with c2:
+        st.slider(
+            "Max Price (£m)",
+            min_value=round(min_price, 1),
+            max_value=round(max_price, 1),
+            step=step,
+            key="ict_price",
+            help="Use the chevrons to fine-tune, or drag the slider.",
+        )
+    sel_price = float(st.session_state["ict_price"])
+
+    # --- Over previous gameweeks (N) + chevrons
+    min_games = 1
+    # guard early season: ensure max_games >= min_games
+    safe_current_gw = int(max(1, current_gw))
+    max_games = max(min_games, safe_current_gw - 1)
+
+    if "ict_prev_games" not in st.session_state:
+        st.session_state["ict_prev_games"] = max_games  # default to as many as available
+
+    g1, g2, g3 = st.columns([2, 7, 2])
+    with g1:
+        dec_n = st.button("‹", key="ict_prev_dec", width="stretch")
+    with g3:
+        inc_n = st.button("›", key="ict_prev_inc", width="stretch")
+
+    if dec_n:
+        st.session_state["ict_prev_games"] = max(min_games, st.session_state["ict_prev_games"] - 1)
+    if inc_n:
+        st.session_state["ict_prev_games"] = min(max_games, st.session_state["ict_prev_games"] + 1)
+
+    with g2:
         st.slider(
             "Over previous gameweeks",
             min_value=min_games,
             max_value=max_games,
-            step=step_games,
-            key="gw",  # bound directly
+            step=1,
+            key="ict_prev_games",   # <-- same key as the chevrons mutate
             help="Use the chevrons to fine-tune, or drag the slider.",
         )
 
-    previous_games = st.session_state["previous_games"]
-
-# Normalize “All” to whatever your core expects
+# normalized values to use below
 pos_arg = "ALL" if selected_pos == "All" else selected_pos
-sel_price = st.session_state["ict_price"]
+sel_price = float(st.session_state["ict_price"])
+prev_games = int(st.session_state["ict_prev_games"])
 
-# --- Apply filters (your existing core.combine_filters)
-filtered = core.combine_filters(pos_arg, sel_price, players_df)
+
+# --- Apply filters and rolling gws
+# filtered = core.combine_filters(pos_arg, sel_price, players_df)
+with st.spinner(f"Calculating ICT for last {prev_games} matches…"):
+    filtered = core.apply_rolling(core.combine_filters(pos_arg, sel_price, players_df), prev_games)
 
 # --- Sort options (optional but handy)
 sort_choice = st.selectbox(

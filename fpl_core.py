@@ -356,4 +356,4 @@ def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
 # # fpl-fdr/quick-test.py
 # teams_df, fixtures_df, event_df, fetched_at, players_df = fetch_fpl_data()
 # print(apply_rolling(combine_filters("DF", 7, players_df), 5).head(20))
-print(fetch_player_history(1))
+# print(fetch_player_history(1))
