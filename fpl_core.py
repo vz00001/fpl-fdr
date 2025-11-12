@@ -312,7 +312,7 @@ def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = Fals
     if exclude_zero_min and "minutes" in df.columns:
         df = df[df["minutes"] > 0]
     if df.empty:
-        return {"total_points":0.0,"influence":0.0,"creativity":0.0,"threat":0.0,"ict_index":0.0}
+        return {"total_points":0,"influence":0.0,"creativity":0.0,"threat":0.0,"ict_index":0.0}
     n = int(max(1, min(n, len(df))))
     recent = df.head(n)
     return {
