@@ -279,9 +279,6 @@ with st.sidebar:
     max_price = float(players_df["price_m"].max())
     step = 0.1
 
-    if "previous_games" not in st.session_state:
-        st.session_state["previous_games"] = max_games
-
     if "ict_price" not in st.session_state:
         st.session_state["ict_price"] = round(max_price, 1)
 
@@ -312,14 +309,11 @@ with st.sidebar:
             key="ict_price",  # bound directly
             help="Use the chevrons to fine-tune, or drag the slider.",
         )
-
     sel_price = float(st.session_state["ict_price"])
 
     # --- Over previous gameweeks (N) + chevrons
     min_games = 1
-    # guard early season: ensure max_games >= min_games
-    safe_current_gw = int(max(1, current_gw))
-    max_games = max(min_games, safe_current_gw - 1)
+    max_games = max(min_games, int(max(1, current_gw)) - 1)
 
     if "ict_prev_games" not in st.session_state:
         st.session_state["ict_prev_games"] = max_games  # default to as many as available
