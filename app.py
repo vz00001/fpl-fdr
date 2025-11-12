@@ -315,43 +315,6 @@ with st.sidebar:
 
     sel_price = float(st.session_state["ict_price"])
 
-with st.sidebar:
-    st.header("⚙️ ICT Filters")
-
-    # --- Position chips
-    pos_options = ["All", "GK", "DF", "MF", "FW"]
-    selected_pos = st.segmented_control("By Position", pos_options, default="All")
-
-    # --- Price slider + chevrons
-    min_price = float(players_df["price_m"].min())
-    max_price = float(players_df["price_m"].max())
-    step = 0.1
-
-    if "ict_price" not in st.session_state:
-        st.session_state["ict_price"] = round(max_price, 1)
-
-    c1, c2, c3 = st.columns([2, 7, 2])
-    with c1:
-        dec_price = st.button("‹", key="ict_price_dec", width="stretch")
-    with c3:
-        inc_price = st.button("›", key="ict_price_inc", width="stretch")
-
-    if dec_price:
-        st.session_state["ict_price"] = round(max(min_price, st.session_state["ict_price"] - step), 1)
-    if inc_price:
-        st.session_state["ict_price"] = round(min(max_price, st.session_state["ict_price"] + step), 1)
-
-    with c2:
-        st.slider(
-            "Max Price (£m)",
-            min_value=round(min_price, 1),
-            max_value=round(max_price, 1),
-            step=step,
-            key="ict_price",
-            help="Use the chevrons to fine-tune, or drag the slider.",
-        )
-    sel_price = float(st.session_state["ict_price"])
-
     # --- Over previous gameweeks (N) + chevrons
     min_games = 1
     # guard early season: ensure max_games >= min_games
