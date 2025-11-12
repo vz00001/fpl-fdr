@@ -278,12 +278,18 @@ with st.sidebar:
     min_price = float(players_df["price_m"].min())
     max_price = float(players_df["price_m"].max())
     step = 0.1
+    min_games = 1
+    max_games = int(current_gw) - 1
+    step_games = 1
+
+    if "previous_games" not in st.session_state:
+        st.session_state["previous_games"] = max_games
 
     if "ict_price" not in st.session_state:
         st.session_state["ict_price"] = round(max_price, 1)
 
     # --- Nudge buttons (update BEFORE slider is created)
-    c1, c2, c3 = st.columns([1, 8, 1])
+    c1, c2, c3 = st.columns([2, 7, 2])
     with c1:
         dec = st.button("‹", key="ict_price_dec", width='stretch')
     with c3:
@@ -312,7 +318,31 @@ with st.sidebar:
 
     sel_price = float(st.session_state["ict_price"])
 
+    # --- Nudge buttons for over previous gameweek
+    c1, c2, c3 = st.columns([2, 7, 2])
+    with c1:
+        dec = st.button("‹", key="gw_dec", width='stretch')
+    with c3:
+        inc = st.button("›", key="gw_inc", width='stretch')
 
+    # Update the session value BEFORE creating the slider
+    if dec:
+        st.session_state["previous_games"] = max(min_games, st.session_state["previous_games"] - step_games)
+    if inc:
+        st.session_state["previous_games"] = min(max_games, st.session_state["previous_games"] + step_games)
+
+    # --- Slider (reads the possibly updated session value)
+    with c2:
+        st.slider(
+            "Over previous gameweeks",
+            min_value=min_games,
+            max_value=max_games,
+            step=step_games,
+            key="gw",  # bound directly
+            help="Use the chevrons to fine-tune, or drag the slider.",
+        )
+
+    previous_games = st.session_state["previous_games"]
 
 # Normalize “All” to whatever your core expects
 pos_arg = "ALL" if selected_pos == "All" else selected_pos

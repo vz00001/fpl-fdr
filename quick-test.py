@@ -356,8 +356,40 @@ def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
 
     return joined.sort_values("ict_index", ascending=False, kind="mergesort").reset_index(drop=True)
 
+def apply_rolling_wo_thread(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
+    ids = list(players_df_slice["id"])
 
+    rows: List[Dict[str, float]] = []
+    # keep workers modest to be polite to the API
+    # max_workers = min(8, max(1, len(ids)))
+    # with ThreadPoolExecutor(max_workers=max_workers) as ex:
+    #     futures = {ex.submit(rolling_ict_for_player, pid, n): pid for pid in ids}
+    #     for fut in as_completed(futures):
+    #         pid = futures[fut]
+    #         try:
+    #             agg = fut.result()
+    #         except Exception:
+    #             # fail-safe: return zeros for this player if anything goes wrong
+    #             agg = {"total_points":0.0, "influence":0.0, "creativity":0.0, "threat":0.0, "ict_index":0.0}
+    #         agg["id"] = pid
+    #         rows.append(agg)
+    for pid in ids:
+        try:
+            agg = rolling_ict_for_player(pid, n)
+        except Exception:
+            agg = {"total_points":0.0, "influence":0.0, "creativity":0.0, "threat":0.0, "ict_index":0.0}
+        agg["id"] = pid
+        rows.append(agg)
 
+    agg_df = pd.DataFrame(rows)
+    for c in ["total_points","influence","creativity","threat","ict_index"]:
+        agg_df[c] = pd.to_numeric(agg_df[c], errors="coerce").fillna(0.0)
+
+    base = players_df_slice[["id","name","pos","team_short","price_m"]].copy()
+    joined = base.merge(agg_df, on="id", how="left")
+    joined[["total_points","influence","creativity","threat","ict_index"]] = \
+        joined[["total_points","influence","creativity","threat","ict_index"]].fillna(0.0)  
+    return joined.sort_values("ict_index", ascending=False, kind="mergesort").reset_index(drop=True)
 
 
 
@@ -369,8 +401,15 @@ def apply_rolling(players_df_slice: pd.DataFrame, n: int) -> pd.DataFrame:
 
 # fpl-fdr/quick-test.py
 teams_df, fixtures_df, event_df, fetched_at, players_df = fetch_fpl_data()
-# print(fetch_player_history(1))
 
-print(apply_rolling(combine_filters("DF", 22, players_df), 5).head(80), "\n")
-
-print(apply_rolling(combine_filters("All", 22, players_df), 5).head(80), "\n")
+# print(apply_rolling(combine_filters("GK", 19, players_df), 5).head(20), "\nGK--------------------------------------------------------------------------------\n")
+# print(apply_rolling(combine_filters("DF", 19, players_df), 5).head(20), "\nDF--------------------------------------------------------------------------------\n")
+# print(apply_rolling(combine_filters("MF", 19, players_df), 5).head(20), "\nMF--------------------------------------------------------------------------------\n")
+# print(apply_rolling(combine_filters("FW", 19, players_df), 5).head(20), "\nFW--------------------------------------------------------------------------------\n")
+import time
+start=time.time()
+print(apply_rolling(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL--------------------------------------------------------------------------------\n")
+print("With threading time:", time.time()-start, "\n")
+# start=time.time()   
+# print(apply_rolling_wo_thread(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL without threading--------------------------------------------------------------------------------\n")
+# print("Without threading time:", time.time()-start, "\n")
