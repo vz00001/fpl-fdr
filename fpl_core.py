@@ -316,7 +316,7 @@ def rolling_ict_for_player(player_id: int, n: int, exclude_zero_min: bool = Fals
     n = int(max(1, min(n, len(df))))
     recent = df.head(n)
     return {
-        "total_points": float(recent["total_points"].sum()),
+        "total_points": int(recent["total_points"].sum()),
         "influence": float(recent["influence"].sum()),
         "creativity": float(recent["creativity"].sum()),
         "threat": float(recent["threat"].sum()),
