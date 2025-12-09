@@ -3,3 +3,4 @@ streamlit>=1.37
 matplotlib
 requests
 numpy
+pytest

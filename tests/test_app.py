@@ -11,7 +11,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "beta_3.py"  # change if your file name is different
+MODULE_PATH = Path(__file__).resolve().parents[1] / "fpl_core.py"  
 spec = importlib.util.spec_from_file_location("app", str(MODULE_PATH))
 app = importlib.util.module_from_spec(spec)
 sys.modules["app"] = app
@@ -72,7 +72,7 @@ def _df(rows):
             [1, False, False, True],
             [2, True,  False, False],
             [3, False, True,  False],
-        ]), 2),
+        ]), 3),
 
         # uses next when no current
         (_df([
@@ -98,7 +98,7 @@ def _df(rows):
         (_df([
             [3, True,  False, False],
             [4, True,  False, False],
-        ]), 3),
+        ]), 4),
     ],
     ids=[
         "prefers_current",
@@ -291,8 +291,8 @@ def test_load_fpl_data_mocks_requests(monkeypatch):
     monkeypatch.setattr(app.requests, "get", fake_get)
 
     # Call the undecorated function as an extra guard (ok if already cleared)
-    fn = getattr(app.load_fpl_data, "__wrapped__", app.load_fpl_data)
-    teams_df, fx_df, events_df = fn()
+    fn = getattr(app.fetch_fpl_data, "__wrapped__", app.fetch_fpl_data)
+    teams_df, fx_df, events_df, fetched_at, players_df = fn()
 
     # Assert our mock was actually called
     assert any("bootstrap-static" in u for u in calls)

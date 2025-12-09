@@ -75,7 +75,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
                 css.at[i, col] = "background-color:#F2F2F2; color:#000; text-align:center;"
                 # keep an em dash or label; optional tooltip
                 html_df.at[i, col] = f'<span class="fdr-tt" data-tt="No fixture scheduled">{label}</span>'
-            else:
+            else: 
                 level = int(max(1, min(5, _round_half_up(float(v)))))
                 bg = FPL_FDR_COLORS[level]
                 fg = "#000000" if (2 <= level <= 4) else "#FFFFFF"
@@ -189,79 +189,6 @@ st.caption("Green = easier fixtures. Red = tougher fixtures.")
 styled = style_fpl_like(disp_df, val_df).hide(axis="index")
 # Render the full HTML manually so Streamlit doesn't escape tooltip markup
 st.markdown(styled.to_html(escape=False), unsafe_allow_html=True)
-
-
-# ---------- Display league table ----------
-st.divider()
-st.subheader("Premier League Table")
-
-display_cols = ["Pos","Team","P","W","D","L","GF","GA","GD","Pts"]
-table_disp = table_df[display_cols].copy()
-
-st.markdown("""
-<style>
-thead tr th { position: sticky; top: 0; background: white; z-index: 1; }
-td, th { font-variant-numeric: tabular-nums; }
-</style>
-""", unsafe_allow_html=True)
-
-def _pos_band(pos: int) -> str:
-    if pos <= 4:      return "#34a853"
-    if pos == 5:      return "#0048FF"
-    if pos >= 18:     return "#E60023"
-    return "#ffffff"
-
-def _style_pos_only(df: pd.DataFrame) -> pd.DataFrame:
-    styles = pd.DataFrame("", index=df.index, columns=df.columns)
-    for i, pos in enumerate(df["Pos"]):
-        styles.at[i, "Pos"] = f"background-color:{_pos_band(int(pos))}; font-weight:700; text-align:center;"
-    return styles
-
-styler = (
-    table_disp.style
-    .hide(axis="index")
-    .set_table_styles([
-        {"selector": "th", "props": [("text-align", "left")]},
-        {"selector": "td", "props": [("padding", "6px 8px")]}
-    ])
-    .set_properties(subset=["Pts"], **{"font-weight": "700"})
-    .apply(_style_pos_only, axis=None)
-)
-st.write(styler, unsafe_allow_html=True)
-
-# ---------- Ratings editor ----------
-st.divider()
-with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expanded=False):
-    st.write("Set how tough each team is to face at home or away.")
-    left, right = st.columns(2)
-    split = math.ceil(len(teams_df) / 2)
-    for col, subdf in zip((left, right), (teams_df.iloc[:split], teams_df.iloc[split:])):
-        with col:
-            for _, row in subdf.sort_values("name").iterrows():
-                tid, name = int(row["team_id"]), row["name"]
-                cols = st.columns([2, 1, 1])
-                with cols[0]: st.write(f"**{name}**")
-                with cols[1]:
-                    st.session_state["ratings"][tid]["home"] = st.number_input(
-                        f"Home {name}", key=f"r{tid}h", min_value=1, max_value=5,
-                        value=int(st.session_state["ratings"][tid]["home"]), step=1, label_visibility="collapsed")
-                with cols[2]:
-                    st.session_state["ratings"][tid]["away"] = st.number_input(
-                        f"Away {name}", key=f"r{tid}a", min_value=1, max_value=5,
-                        value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
-
-# --- Footer / meta ---
-tz = "Asia/Ho_Chi_Minh"
-bits = []
-if fetched_at is not None:
-    try:
-        local = pd.to_datetime(fetched_at, utc=True).tz_convert(tz)
-        bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} My Tho time")
-    except Exception:
-        pass
-src = "Source: FPL fixtures (finished matches only). ^0.5.4"
-tail = " • ".join(bits) + (" • " if bits else "")
-st.caption(f"{tail}{src}")
 
 # ---------- ICTindex: Filters + Table (polished UI) ----------
 
@@ -420,3 +347,74 @@ with col_next:
     if st.button("Next ➡️", width='stretch', disabled=(st.session_state[pg_key] >= total_pages)):
         st.session_state[pg_key] += 1
 
+# ---------- Display league table ----------
+st.divider()
+st.subheader("Premier League Table")
+
+display_cols = ["Pos","Team","P","W","D","L","GF","GA","GD","Pts"]
+table_disp = table_df[display_cols].copy()
+
+st.markdown("""
+<style>
+thead tr th { position: sticky; top: 0; background: white; z-index: 1; }
+td, th { font-variant-numeric: tabular-nums; }
+</style>
+""", unsafe_allow_html=True)
+
+def _pos_band(pos: int) -> str:
+    if pos <= 4:      return "#34a853"
+    if pos == 5:      return "#0048FF"
+    if pos >= 18:     return "#E60023"
+    return "#ffffff"
+
+def _style_pos_only(df: pd.DataFrame) -> pd.DataFrame:
+    styles = pd.DataFrame("", index=df.index, columns=df.columns)
+    for i, pos in enumerate(df["Pos"]):
+        styles.at[i, "Pos"] = f"background-color:{_pos_band(int(pos))}; font-weight:700; text-align:center;"
+    return styles
+
+styler = (
+    table_disp.style
+    .hide(axis="index")
+    .set_table_styles([
+        {"selector": "th", "props": [("text-align", "left")]},
+        {"selector": "td", "props": [("padding", "6px 8px")]}
+    ])
+    .set_properties(subset=["Pts"], **{"font-weight": "700"})
+    .apply(_style_pos_only, axis=None)
+)
+st.write(styler, unsafe_allow_html=True)
+
+# ---------- Ratings editor ----------
+st.divider()
+with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expanded=False):
+    st.write("Set how tough each team is to face at home or away.")
+    left, right = st.columns(2)
+    split = math.ceil(len(teams_df) / 2)
+    for col, subdf in zip((left, right), (teams_df.iloc[:split], teams_df.iloc[split:])):
+        with col:
+            for _, row in subdf.sort_values("name").iterrows():
+                tid, name = int(row["team_id"]), row["name"]
+                cols = st.columns([2, 1, 1])
+                with cols[0]: st.write(f"**{name}**")
+                with cols[1]:
+                    st.session_state["ratings"][tid]["home"] = st.number_input(
+                        f"Home {name}", key=f"r{tid}h", min_value=1, max_value=5,
+                        value=int(st.session_state["ratings"][tid]["home"]), step=1, label_visibility="collapsed")
+                with cols[2]:
+                    st.session_state["ratings"][tid]["away"] = st.number_input(
+                        f"Away {name}", key=f"r{tid}a", min_value=1, max_value=5,
+                        value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
+
+# --- Footer / meta ---
+tz = "Asia/Ho_Chi_Minh"
+bits = []
+if fetched_at is not None:
+    try:
+        local = pd.to_datetime(fetched_at, utc=True).tz_convert(tz)
+        bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} My Tho time")
+    except Exception:
+        pass
+src = "Source: FPL fixtures (finished matches only). ^0.5.4"
+tail = " • ".join(bits) + (" • " if bits else "")
+st.caption(f"{tail}{src}")

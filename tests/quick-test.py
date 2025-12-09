@@ -93,10 +93,21 @@ def fetch_player_history(player_id: int) -> pd.DataFrame:
 # ---------------------------
 
 def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int]) -> pd.Series:
-    c1, c2, c3, c4 = cuts
-    bins = [-np.inf, c1, c2, c3, c4, np.inf]
-    labels = [1, 2, 3, 4, 5]
+    c1, c2, c3, c4, c5 = cuts
+    bins = [-np.inf, c1, c2, c3, c4, c5, np.inf]
+    labels = [0, 1, 2, 3, 4, 5]
     return pd.cut(series, bins=bins, labels=labels, include_lowest=True).astype(int)
+
+def table_ratings_fixed(table: pd.DataFrame, team: pd.DataFrame) -> Dict[int, Dict[str, int]]:
+    cuts = (0, 4, 8, 12, 16)
+    # NOTE: mirrors your current mapping (home <- str_away, away <- str_home)
+    home = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
+    away = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
+    # return {int(tid): {"home": int(h), "away": int(a)}
+    #         for tid, h, a in zip(table["team_id"], home, away)}
+    short2id = {r["short"]: int(r["team_id"]) for _, r in team.iterrows()}
+    return {short2id[team_short]: {"home": 6 - int(h), "away": 6 - int(a) - 1}
+            for team_short, h, a in zip(table["Team"], home, away)}
 
 def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
     cuts = (1040, 1100, 1240, 1340)
@@ -105,17 +116,6 @@ def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
     away = strength_to_fixed_cutpoints(teams["str_home"], cuts=cuts)
     return {int(tid): {"home": int(h), "away": int(a)}
             for tid, h, a in zip(teams["team_id"], home, away)}
-
-def table_ratings_fixed(table: pd.DataFrame, team: pd.DataFrame) -> Dict[int, Dict[str, int]]:
-    cuts = (0, 5, 10, 15)
-    # NOTE: mirrors your current mapping (home <- str_away, away <- str_home)
-    home = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
-    away = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
-    # return {int(tid): {"home": int(h), "away": int(a)}
-    #         for tid, h, a in zip(table["team_id"], home, away)}
-    short2id = {r["short"]: int(r["team_id"]) for _, r in team.iterrows()}
-    return {short2id[team_short]: {"home": 6 - int(h) + 1, "away": 6 - int(a)}
-            for team_short, h, a in zip(table["Team"], home, away)}
 
 def determine_current_gw(event_df: pd.DataFrame) -> int:
     current = event_df.loc[event_df["is_current"] == True, "id"]
@@ -401,15 +401,16 @@ def apply_rolling_wo_thread(players_df_slice: pd.DataFrame, n: int) -> pd.DataFr
 
 # fpl-fdr/quick-test.py
 teams_df, fixtures_df, event_df, fetched_at, players_df = fetch_fpl_data()
-
+# import time
+# start=time.time()
 # print(apply_rolling(combine_filters("GK", 19, players_df), 5).head(20), "\nGK--------------------------------------------------------------------------------\n")
 # print(apply_rolling(combine_filters("DF", 19, players_df), 5).head(20), "\nDF--------------------------------------------------------------------------------\n")
 # print(apply_rolling(combine_filters("MF", 19, players_df), 5).head(20), "\nMF--------------------------------------------------------------------------------\n")
 # print(apply_rolling(combine_filters("FW", 19, players_df), 5).head(20), "\nFW--------------------------------------------------------------------------------\n")
-import time
-start=time.time()
-print(apply_rolling(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL--------------------------------------------------------------------------------\n")
-print("With threading time:", time.time()-start, "\n")
-# start=time.time()   
-# print(apply_rolling_wo_thread(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL without threading--------------------------------------------------------------------------------\n")
-# print("Without threading time:", time.time()-start, "\n")
+# print(apply_rolling(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL--------------------------------------------------------------------------------\n")
+# print("With threading time:", time.time()-start, "\n")
+# # start=time.time()   
+# # print(apply_rolling_wo_thread(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL without threading--------------------------------------------------------------------------------\n")
+# # print("Without threading time:", time.time()-start, "\n")
+table_df = build_pl_table(teams_df, fixtures_df)
+print(table_ratings_fixed(table_df, teams_df))

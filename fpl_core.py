@@ -91,10 +91,21 @@ def fetch_player_history(player_id: int) -> pd.DataFrame:
 # ---------------------------
 
 def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int]) -> pd.Series:
-    c1, c2, c3, c4 = cuts
-    bins = [-np.inf, c1, c2, c3, c4, np.inf]
-    labels = [1, 2, 3, 4, 5]
+    c1, c2, c3, c4, c5 = cuts
+    bins = [-np.inf, c1, c2, c3, c4, c5, np.inf]
+    labels = [0, 1, 2, 3, 4, 5]
     return pd.cut(series, bins=bins, labels=labels, include_lowest=True).astype(int)
+
+def table_ratings_fixed(table: pd.DataFrame, team: pd.DataFrame) -> Dict[int, Dict[str, int]]:
+    cuts = (0, 4, 8, 12, 16)
+    # NOTE: mirrors your current mapping (home <- str_away, away <- str_home)
+    home = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
+    away = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
+    # return {int(tid): {"home": int(h), "away": int(a)}
+    #         for tid, h, a in zip(table["team_id"], home, away)}
+    short2id = {r["short"]: int(r["team_id"]) for _, r in team.iterrows()}
+    return {short2id[team_short]: {"home": 6 - int(h), "away": 6 - int(a) - 1}
+            for team_short, h, a in zip(table["Team"], home, away)}
 
 def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
     cuts = (1040, 1100, 1240, 1340)
@@ -103,15 +114,6 @@ def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
     away = strength_to_fixed_cutpoints(teams["str_home"], cuts=cuts)
     return {int(tid): {"home": int(h), "away": int(a)}
             for tid, h, a in zip(teams["team_id"], home, away)}
-
-def table_ratings_fixed(table: pd.DataFrame, teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
-    cuts = (0, 5, 10, 15)
-    # NOTE: mirrors your current mapping (home <- str_away, away <- str_home)
-    home = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
-    away = strength_to_fixed_cutpoints(table["Pos"], cuts=cuts)
-    short2id = {r["short"]: int(r["team_id"]) for _, r in teams.iterrows()}
-    return {short2id[team_short]: {"home": 6 - int(h) + 1, "away": 6 - int(a)}
-            for team_short, h, a in zip(table["Team"], home, away)}
 
 def determine_current_gw(event_df: pd.DataFrame) -> int:
     current = event_df.loc[event_df["is_current"] == True, "id"]
