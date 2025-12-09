@@ -228,6 +228,48 @@ with st.sidebar:
             help="Use the chevrons to fine-tune, or drag the slider.",
         )
 
+    # --- Sidebar: Team visibility ---
+    st.subheader("Teams")
+
+    _all = teams_df.sort_values("name")
+    id_options = list(map(int, _all["team_id"]))
+
+    def _fmt_team(tid: int) -> str:
+        r = _all.loc[_all["team_id"] == tid].iloc[0]
+        return f'{r["name"]} ({r["short"]})'
+
+    visible_ids = st.multiselect(
+        "Show teams in ticker:",
+        id_options,
+        default=id_options,           # all selected by default
+        format_func=_fmt_team,
+    )
+    # safety: if user deselects everything, fallback to all
+    if not visible_ids:
+        visible_ids = id_options        
+
+
+
+# ---------- Build & display ticker ----------
+disp_df, val_df = core.build_ticker(
+    teams=teams_df, 
+    fixtures=fixtures_df, 
+    ratings=st.session_state["ratings"],
+    gw_start=int(gw_start), 
+    gw_len=int(gw_len),
+    visible_team_ids=visible_ids,
+    method=rating_method, 
+    w_team=w_team, 
+    w_opp=w_opp,
+)
+
+st.subheader("Fixture Ticker")
+st.caption("Green = easier fixtures. Red = tougher fixtures.")
+styled = style_fpl_like(disp_df, val_df).hide(axis="index")
+# Render the full HTML manually so Streamlit doesn't escape tooltip markup
+st.markdown(styled.to_html(escape=False), unsafe_allow_html=True)
+
+# ---------- Build & display ICT table ----------
 # normalized values to use below
 pos_arg = "ALL" if selected_pos == "All" else selected_pos
 sel_price = float(st.session_state["ict_price"])
@@ -308,46 +350,7 @@ with col_page:
 with col_next:
     if st.button("Next ➡️", width='stretch', disabled=(st.session_state[pg_key] >= total_pages)):
         st.session_state[pg_key] += 1
-
-    # --- Sidebar: Team visibility ---
-    st.subheader("Teams")
-
-    _all = teams_df.sort_values("name")
-    id_options = list(map(int, _all["team_id"]))
-
-    def _fmt_team(tid: int) -> str:
-        r = _all.loc[_all["team_id"] == tid].iloc[0]
-        return f'{r["name"]} ({r["short"]})'
-
-    visible_ids = st.multiselect(
-        "Show teams in ticker:",
-        id_options,
-        default=id_options,           # all selected by default
-        format_func=_fmt_team,
-    )
-    # safety: if user deselects everything, fallback to all
-    if not visible_ids:
-        visible_ids = id_options
         
-# ---------- Build & display ticker ----------
-disp_df, val_df = core.build_ticker(
-    teams=teams_df, 
-    fixtures=fixtures_df, 
-    ratings=st.session_state["ratings"],
-    gw_start=int(gw_start), 
-    gw_len=int(gw_len),
-    visible_team_ids=visible_ids,
-    method=rating_method, 
-    w_team=w_team, 
-    w_opp=w_opp,
-)
-
-st.subheader("Fixture Ticker")
-st.caption("Green = easier fixtures. Red = tougher fixtures.")
-styled = style_fpl_like(disp_df, val_df).hide(axis="index")
-# Render the full HTML manually so Streamlit doesn't escape tooltip markup
-st.markdown(styled.to_html(escape=False), unsafe_allow_html=True)
-
 # ---------- Display league table ----------
 st.divider()
 st.subheader("Premier League Table")
