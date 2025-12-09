@@ -118,6 +118,8 @@ if "ratings" not in st.session_state:
 
 # ---------- Sidebar: Tuning ----------
 with st.sidebar:
+
+    # --- Sidebar: GW Tuning ---    
     st.header("Tuning")
     current_gw = core.determine_current_gw(event_df)
     min_gw = int(fixtures_df["event"].min())
@@ -131,7 +133,83 @@ with st.sidebar:
     with col_w1: w_team = st.slider("Weight: Team", min_value=0.0, max_value=1.0, value=0.25, step=0.25)
     with col_w2: w_opp  = st.slider("Weight: Opponent", min_value=0.0, max_value=1.0, value=0.75, step=0.25)
     st.caption("Works best when both weights add to 1.0.")
+    # --- Sidebar: ICT Filters ---
+    st.header("⚙️ ICT Filters")
+    # --- Position chips
+    pos_options = ["All", "GK", "DF", "MF", "FW"]
+    selected_pos = st.segmented_control("By Position", pos_options, default="All")
+    min_price = float(players_df["price_m"].min())
+    max_price = float(players_df["price_m"].max())
+    step = 0.1
+    if "ict_price" not in st.session_state:
+        st.session_state["ict_price"] = round(max_price, 1)
+    # --- Nudge buttons (update BEFORE slider is created)
+    c1, c2, c3 = st.columns([2, 7, 2])
+    with c1:
+        dec = st.button("‹", key="ict_price_dec", width='stretch')
+    with c3:
+        inc = st.button("›", key="ict_price_inc", width='stretch')
+    # Update the session value BEFORE creating the slider
+    if dec:
+        st.session_state["ict_price"] = round(
+            max(min_price, st.session_state["ict_price"] - step), 1
+        )
+    if inc:
+        st.session_state["ict_price"] = round(
+            min(max_price, st.session_state["ict_price"] + step), 1
+        )
+    # --- Slider (reads the possibly updated session value)
+    with c2:
+        st.slider(
+            "Max Price (£m)",
+            min_value=round(min_price, 1),
+            max_value=round(max_price, 1),
+            step=step,
+            key="ict_price",  # bound directly
+            help="Use the chevrons to fine-tune, or drag the slider.",
+        )
+    sel_price = float(st.session_state["ict_price"])
+    # --- Over previous gameweeks (N) + chevrons
+    min_games = 1
+    max_games = max(min_games, int(max(1, current_gw)) - 1)
+    if "ict_prev_games" not in st.session_state:
+        st.session_state["ict_prev_games"] = max_games  # default to as many as available
+    g1, g2, g3 = st.columns([2, 7, 2])
+    with g1:
+        dec_n = st.button("‹", key="ict_prev_dec", width="stretch")
+    with g3:
+        inc_n = st.button("›", key="ict_prev_inc", width="stretch")
+    if dec_n:
+        st.session_state["ict_prev_games"] = max(min_games, st.session_state["ict_prev_games"] - 1)
+    if inc_n:
+        st.session_state["ict_prev_games"] = min(max_games, st.session_state["ict_prev_games"] + 1)
+    with g2:
+        st.slider(
+            "Over previous gameweeks",
+            min_value=min_games,
+            max_value=max_games,
+            step=1,
+            key="ict_prev_games",   # <-- same key as the chevrons mutate
+            help="Use the chevrons to fine-tune, or drag the slider.",
+        )
 
+    # --- Sidebar: Team visibility ---
+    st.subheader("Teams")
+    _all = teams_df.sort_values("name")
+    id_options = list(map(int, _all["team_id"]))
+    def _fmt_team(tid: int) -> str:
+        r = _all.loc[_all["team_id"] == tid].iloc[0]
+        return f'{r["name"]} ({r["short"]})'
+    visible_ids = st.multiselect(
+        "Show teams in ticker:",
+        id_options,
+        default=id_options,           # all selected by default
+        format_func=_fmt_team,
+    )
+    # safety: if user deselects everything, fallback to all
+    if not visible_ids:
+        visible_ids = id_options     
+    # --- Sidebar: Presets ---
     st.subheader("Presets")
     preset = {"ratings": st.session_state["ratings"],
               "settings": {"gw_start": gw_start, "gw_len": gw_len,
@@ -151,104 +229,6 @@ with st.sidebar:
             st.success("Preset loaded.")
         except Exception as e:
             st.error(f"Invalid preset: {e}")
-
-# ---------- ICTindex: Filters + Table ----------
-
-st.subheader("ICT Index")
-st.caption("Sort players by their ICT Index — the combined measure of Influence, Creativity, and Threat.")
-
-with st.sidebar:
-    st.header("⚙️ ICT Filters")
-
-    # --- Position chips
-    pos_options = ["All", "GK", "DF", "MF", "FW"]
-    selected_pos = st.segmented_control("By Position", pos_options, default="All")
-
-    min_price = float(players_df["price_m"].min())
-    max_price = float(players_df["price_m"].max())
-    step = 0.5
-
-    if "ict_price" not in st.session_state:
-        st.session_state["ict_price"] = round(max_price, 1)
-
-    # --- Nudge buttons (update BEFORE slider is created)
-    c1, c2, c3 = st.columns([2, 7, 2])
-    with c1:
-        dec = st.button("‹", key="ict_price_dec", width='stretch')
-    with c3:
-        inc = st.button("›", key="ict_price_inc", width='stretch')
-
-    # Update the session value BEFORE creating the slider
-    if dec:
-        st.session_state["ict_price"] = round(
-            max(min_price, st.session_state["ict_price"] - step), 1
-        )
-    if inc:
-        st.session_state["ict_price"] = round(
-            min(max_price, st.session_state["ict_price"] + step), 1
-        )
-
-    # --- Slider (reads the possibly updated session value)
-    with c2:
-        st.slider(
-            "Max Price (£m)",
-            min_value=round(min_price, 1),
-            max_value=round(max_price, 1),
-            step=step,
-            key="ict_price",  # bound directly
-            help="Use the chevrons to fine-tune, or drag the slider.",
-        )
-    sel_price = float(st.session_state["ict_price"])
-
-    # --- Over previous gameweeks (N) + chevrons
-    min_games = 1
-    max_games = max(min_games, int(max(1, current_gw)) - 1)
-
-    if "ict_prev_games" not in st.session_state:
-        st.session_state["ict_prev_games"] = max_games  # default to as many as available
-
-    g1, g2, g3 = st.columns([2, 7, 2])
-    with g1:
-        dec_n = st.button("‹", key="ict_prev_dec", width="stretch")
-    with g3:
-        inc_n = st.button("›", key="ict_prev_inc", width="stretch")
-
-    if dec_n:
-        st.session_state["ict_prev_games"] = max(min_games, st.session_state["ict_prev_games"] - 1)
-    if inc_n:
-        st.session_state["ict_prev_games"] = min(max_games, st.session_state["ict_prev_games"] + 1)
-
-    with g2:
-        st.slider(
-            "Over previous gameweeks",
-            min_value=min_games,
-            max_value=max_games,
-            step=1,
-            key="ict_prev_games",   # <-- same key as the chevrons mutate
-            help="Use the chevrons to fine-tune, or drag the slider.",
-        )
-
-    # --- Sidebar: Team visibility ---
-    st.subheader("Teams")
-
-    _all = teams_df.sort_values("name")
-    id_options = list(map(int, _all["team_id"]))
-
-    def _fmt_team(tid: int) -> str:
-        r = _all.loc[_all["team_id"] == tid].iloc[0]
-        return f'{r["name"]} ({r["short"]})'
-
-    visible_ids = st.multiselect(
-        "Show teams in ticker:",
-        id_options,
-        default=id_options,           # all selected by default
-        format_func=_fmt_team,
-    )
-    # safety: if user deselects everything, fallback to all
-    if not visible_ids:
-        visible_ids = id_options        
-
-
 
 # ---------- Build & display ticker ----------
 disp_df, val_df = core.build_ticker(
@@ -270,6 +250,8 @@ styled = style_fpl_like(disp_df, val_df).hide(axis="index")
 st.markdown(styled.to_html(escape=False), unsafe_allow_html=True)
 
 # ---------- Build & display ICT table ----------
+st.subheader("ICT Index")
+st.caption("Sort players by their ICT Index — the combined measure of Influence, Creativity, and Threat.")
 # normalized values to use below
 pos_arg = "ALL" if selected_pos == "All" else selected_pos
 sel_price = float(st.session_state["ict_price"])
