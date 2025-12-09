@@ -195,7 +195,7 @@ def compute_fixture_difficulty(
         s = max(1e-6, (w_team + w_opp))
         w_t, w_o = w_team / s, w_opp / s
         diff = (w_o * opp_context) + (w_t * (6 - team_context))
-    return float(np.clip(diff, 1.0, 5.0))
+    return float(np.clip(diff, 0, 5.0))
 
 def build_ticker(
     teams: pd.DataFrame,

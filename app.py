@@ -401,6 +401,6 @@ if fetched_at is not None:
         bits.append(f"Last updated: {local.strftime('%Y-%m-%d %H:%M %Z')} My Tho time")
     except Exception:
         pass
-src = "Source: FPL fixtures (finished matches only). ^0.5.4"
+src = "Source: FPL fixtures (finished matches only). ^0.6.1"
 tail = " • ".join(bits) + (" • " if bits else "")
 st.caption(f"{tail}{src}")
