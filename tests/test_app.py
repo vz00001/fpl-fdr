@@ -257,7 +257,6 @@ def test_fetch_fpl_data_mocks_http_session(monkeypatch):
             self._p = payload
         def json(self):
             return self._p
-
     class FakeSession:
         def get(self, url):
             calls.append(url)
