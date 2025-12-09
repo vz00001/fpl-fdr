@@ -151,46 +151,8 @@ with st.sidebar:
             st.success("Preset loaded.")
         except Exception as e:
             st.error(f"Invalid preset: {e}")
-    # --- Sidebar: Team visibility ---
-    st.subheader("Teams")
 
-    _all = teams_df.sort_values("name")
-    id_options = list(map(int, _all["team_id"]))
-
-    def _fmt_team(tid: int) -> str:
-        r = _all.loc[_all["team_id"] == tid].iloc[0]
-        return f'{r["name"]} ({r["short"]})'
-
-    visible_ids = st.multiselect(
-        "Show teams in ticker:",
-        id_options,
-        default=id_options,           # all selected by default
-        format_func=_fmt_team,
-    )
-    # safety: if user deselects everything, fallback to all
-    if not visible_ids:
-        visible_ids = id_options
-
-# ---------- Build & display ticker ----------
-disp_df, val_df = core.build_ticker(
-    teams=teams_df, 
-    fixtures=fixtures_df, 
-    ratings=st.session_state["ratings"],
-    gw_start=int(gw_start), 
-    gw_len=int(gw_len),
-    visible_team_ids=visible_ids,
-    method=rating_method, 
-    w_team=w_team, 
-    w_opp=w_opp,
-)
-
-st.subheader("Fixture Ticker")
-st.caption("Green = easier fixtures. Red = tougher fixtures.")
-styled = style_fpl_like(disp_df, val_df).hide(axis="index")
-# Render the full HTML manually so Streamlit doesn't escape tooltip markup
-st.markdown(styled.to_html(escape=False), unsafe_allow_html=True)
-
-# ---------- ICTindex: Filters + Table (polished UI) ----------
+# ---------- ICTindex: Filters + Table ----------
 
 st.subheader("ICT Index")
 st.caption("Sort players by their ICT Index — the combined measure of Influence, Creativity, and Threat.")
@@ -204,7 +166,7 @@ with st.sidebar:
 
     min_price = float(players_df["price_m"].min())
     max_price = float(players_df["price_m"].max())
-    step = 0.1
+    step = 0.5
 
     if "ict_price" not in st.session_state:
         st.session_state["ict_price"] = round(max_price, 1)
@@ -347,6 +309,45 @@ with col_next:
     if st.button("Next ➡️", width='stretch', disabled=(st.session_state[pg_key] >= total_pages)):
         st.session_state[pg_key] += 1
 
+    # --- Sidebar: Team visibility ---
+    st.subheader("Teams")
+
+    _all = teams_df.sort_values("name")
+    id_options = list(map(int, _all["team_id"]))
+
+    def _fmt_team(tid: int) -> str:
+        r = _all.loc[_all["team_id"] == tid].iloc[0]
+        return f'{r["name"]} ({r["short"]})'
+
+    visible_ids = st.multiselect(
+        "Show teams in ticker:",
+        id_options,
+        default=id_options,           # all selected by default
+        format_func=_fmt_team,
+    )
+    # safety: if user deselects everything, fallback to all
+    if not visible_ids:
+        visible_ids = id_options
+        
+# ---------- Build & display ticker ----------
+disp_df, val_df = core.build_ticker(
+    teams=teams_df, 
+    fixtures=fixtures_df, 
+    ratings=st.session_state["ratings"],
+    gw_start=int(gw_start), 
+    gw_len=int(gw_len),
+    visible_team_ids=visible_ids,
+    method=rating_method, 
+    w_team=w_team, 
+    w_opp=w_opp,
+)
+
+st.subheader("Fixture Ticker")
+st.caption("Green = easier fixtures. Red = tougher fixtures.")
+styled = style_fpl_like(disp_df, val_df).hide(axis="index")
+# Render the full HTML manually so Streamlit doesn't escape tooltip markup
+st.markdown(styled.to_html(escape=False), unsafe_allow_html=True)
+
 # ---------- Display league table ----------
 st.divider()
 st.subheader("Premier League Table")
@@ -403,7 +404,7 @@ with st.expander("Ratings (1 easy → 5 hard) — edit per team & venue", expand
                         value=int(st.session_state["ratings"][tid]["home"]), step=1, label_visibility="collapsed")
                 with cols[2]:
                     st.session_state["ratings"][tid]["away"] = st.number_input(
-                        f"Away {name}", key=f"r{tid}a", min_value=1, max_value=5,
+                        f"Away {name}", key=f"r{tid}a", min_value=0, max_value=5,
                         value=int(st.session_state["ratings"][tid]["away"]), step=1, label_visibility="collapsed")
 
 # --- Footer / meta ---
