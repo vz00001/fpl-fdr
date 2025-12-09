@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any
 import dask.dataframe as dd
 
 from narwhals._dask.utils import add_row_index, evaluate_exprs
-from narwhals._expression_parsing import ExprKind
 from narwhals._pandas_like.utils import native_to_narwhals_dtype, select_columns_by_name
 from narwhals._typing_compat import assert_never
 from narwhals._utils import (
@@ -19,6 +18,7 @@ from narwhals._utils import (
     parse_columns_to_drop,
     zip_strict,
 )
+from narwhals.exceptions import MultiOutputExpressionError
 from narwhals.typing import CompliantLazyFrame
 
 if TYPE_CHECKING:
@@ -107,6 +107,13 @@ class DaskLazyFrame(
     def _iter_columns(self) -> Iterator[dx.Series]:
         for _col, ser in self.native.items():  # noqa: PERF102
             yield ser
+
+    def _evaluate_single_output_expr(self, obj: DaskExpr) -> dx.Series:
+        results = obj._call(self)
+        if len(results) != 1:  # pragma: no cover
+            msg = "multi-output expressions not allowed in this context"
+            raise MultiOutputExpressionError(msg)
+        return results[0]
 
     def with_columns(self, *exprs: DaskExpr) -> Self:
         new_series = evaluate_exprs(self, *exprs)
@@ -223,10 +230,10 @@ class DaskLazyFrame(
             return self._with_native(add_row_index(self.native, name))
         plx = self.__narwhals_namespace__()
         columns = self.columns
-        const_expr = plx.lit(value=1, dtype=None).alias(name).broadcast(ExprKind.LITERAL)
+        const_expr = plx.lit(1, dtype=None).alias(name).broadcast()
         row_index_expr = (
             plx.col(name).cum_sum(reverse=False).over(partition_by=[], order_by=order_by)
-            - 1
+            - plx.lit(1, dtype=None).broadcast()
         )
         return self.with_columns(const_expr).select(row_index_expr, plx.col(*columns))
 
@@ -247,7 +254,9 @@ class DaskLazyFrame(
             raise error
         if keep == "none":
             subset = subset or self.columns
-            token = generate_temporary_column_name(n_bytes=8, columns=subset)
+            token = generate_temporary_column_name(
+                n_bytes=8, columns=subset, prefix="count_"
+            )
             ser = self.native.groupby(subset).size().rename(token)
             ser = ser[ser == 1]
             unique = ser.reset_index().drop(columns=token)
@@ -290,7 +299,7 @@ class DaskLazyFrame(
     def _join_inner(
         self, other: Self, *, left_on: Sequence[str], right_on: Sequence[str], suffix: str
     ) -> dd.DataFrame:
-        return self.native.merge(
+        return self.native.dropna(subset=left_on, how="any").merge(
             other.native,
             left_on=left_on,
             right_on=right_on,
@@ -302,7 +311,7 @@ class DaskLazyFrame(
         self, other: Self, *, left_on: Sequence[str], right_on: Sequence[str], suffix: str
     ) -> dd.DataFrame:
         result_native = self.native.merge(
-            other.native,
+            other.native.dropna(subset=right_on, how="any"),
             how="left",
             left_on=left_on,
             right_on=right_on,
@@ -320,22 +329,37 @@ class DaskLazyFrame(
     ) -> dd.DataFrame:
         # dask does not retain keys post-join
         # we must append the suffix to each key before-hand
-
+        self_native = self.native
         right_on_mapper = _remap_full_join_keys(left_on, right_on, suffix)
         other_native = other.native.rename(columns=right_on_mapper)
         check_column_names_are_unique(other_native.columns)
         right_suffixed = list(right_on_mapper.values())
-        return self.native.merge(
-            other_native,
+
+        left_null_mask = self_native[list(left_on)].isna().any(axis=1)
+        right_null_mask = other_native[right_suffixed].isna().any(axis=1)
+
+        # We need to add suffix to `other` columns overlapping in `self` if not in keys
+        to_rename = set(other.columns).intersection(self.columns).difference(right_on)
+        right_null_rows = other_native[right_null_mask].rename(
+            columns={col: f"{col}{suffix}" for col in to_rename}
+        )
+
+        join_result = self_native[~left_null_mask].merge(
+            other_native[~right_null_mask],
             left_on=left_on,
             right_on=right_suffixed,
             how="outer",
             suffixes=("", suffix),
         )
+        return dd.concat(
+            [join_result, self_native[left_null_mask], right_null_rows],
+            axis=0,
+            join="outer",
+        )
 
     def _join_cross(self, other: Self, *, suffix: str) -> dd.DataFrame:
         key_token = generate_temporary_column_name(
-            n_bytes=8, columns=(*self.columns, *other.columns)
+            n_bytes=8, columns=(*self.columns, *other.columns), prefix="cross_join_key_"
         )
         return (
             self.native.assign(**{key_token: 0})
@@ -357,7 +381,7 @@ class DaskLazyFrame(
             columns_to_select=list(right_on),
             columns_mapping=dict(zip(right_on, left_on)),
         )
-        return self.native.merge(
+        return self.native.dropna(subset=left_on, how="any").merge(
             other_native, how="inner", left_on=left_on, right_on=left_on
         )
 
@@ -365,7 +389,7 @@ class DaskLazyFrame(
         self, other: Self, *, left_on: Sequence[str], right_on: Sequence[str]
     ) -> dd.DataFrame:
         indicator_token = generate_temporary_column_name(
-            n_bytes=8, columns=(*self.columns, *other.columns)
+            n_bytes=8, columns=(*self.columns, *other.columns), prefix="join_indicator_"
         )
         other_native = self._join_filter_rename(
             other=other,
@@ -373,7 +397,7 @@ class DaskLazyFrame(
             columns_mapping=dict(zip(right_on, left_on)),
         )
         df = self.native.merge(
-            other_native,
+            other_native.dropna(subset=left_on, how="any"),
             how="left",
             indicator=indicator_token,  # pyright: ignore[reportArgumentType]
             left_on=left_on,
@@ -477,13 +501,18 @@ class DaskLazyFrame(
         raise NotImplementedError(msg)
 
     def gather_every(self, n: int, offset: int) -> Self:
-        row_index_token = generate_temporary_column_name(n_bytes=8, columns=self.columns)
+        row_index_token = generate_temporary_column_name(
+            n_bytes=8, columns=self.columns, prefix="row_index_"
+        )
         plx = self.__narwhals_namespace__()
+        offset_expr = plx.lit(offset, dtype=None).broadcast()
+        n_expr = plx.lit(n, dtype=None).broadcast()
+        zero_expr = plx.lit(0, dtype=None).broadcast()
         return (
             self.with_row_index(row_index_token, order_by=None)
             .filter(
-                (plx.col(row_index_token) >= offset)
-                & ((plx.col(row_index_token) - offset) % n == 0)
+                (plx.col(row_index_token) >= offset_expr)
+                & ((plx.col(row_index_token) - offset_expr) % n_expr == zero_expr)
             )
             .drop([row_index_token], strict=False)
         )

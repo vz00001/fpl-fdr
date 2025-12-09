@@ -56,9 +56,7 @@ def get_pandas() -> Any:
 
 def get_modin() -> Any:  # pragma: no cover
     """Get modin.pandas module (if already imported - else return None)."""
-    if (modin := sys.modules.get("modin", None)) is not None:
-        return modin.pandas
-    return None
+    return sys.modules.get("modin.pandas", None)
 
 
 def get_cudf() -> Any:
@@ -411,6 +409,14 @@ def is_numpy_array_1d_int(arr: Any) -> TypeIs[_1DArrayInt]:
     )
 
 
+def is_numpy_array_1d_bool(arr: Any) -> TypeIs[_1DArrayInt]:
+    return (
+        (np := get_numpy())
+        and is_numpy_array_1d(arr)
+        and np.issubdtype(arr.dtype, np.bool_)
+    )
+
+
 def is_numpy_array_2d(arr: Any) -> TypeIs[_2DArray]:
     """Check whether `arr` is a 2D NumPy Array without importing NumPy."""
     return is_numpy_array(arr) and arr.ndim == 2
@@ -480,9 +486,6 @@ def is_into_series(native_series: Any | IntoSeriesT) -> TypeIs[IntoSeriesT]:
     Arguments:
         native_series: The object to check.
 
-    Returns:
-        `True` if `native_series` can be converted to a Narwhals Series, `False` otherwise.
-
     Examples:
         >>> import pandas as pd
         >>> import polars as pl
@@ -516,9 +519,6 @@ def is_into_dataframe(native_dataframe: Any | IntoDataFrameT) -> TypeIs[IntoData
 
     Arguments:
         native_dataframe: The object to check.
-
-    Returns:
-        `True` if `native_dataframe` can be converted to a Narwhals DataFrame, `False` otherwise.
 
     Examples:
         >>> import pandas as pd
@@ -590,6 +590,12 @@ def is_narwhals_series(ser: Any | Series[IntoSeriesT]) -> TypeIs[Series[IntoSeri
 
 def is_narwhals_series_int(ser: Any | Series[IntoSeriesT]) -> TypeIs[Series[IntoSeriesT]]:
     return is_narwhals_series(ser) and ser.dtype.is_integer()
+
+
+def is_narwhals_series_bool(
+    ser: Any | Series[IntoSeriesT],
+) -> TypeIs[Series[IntoSeriesT]]:
+    return is_narwhals_series(ser) and ser.dtype.is_boolean()
 
 
 __all__ = [

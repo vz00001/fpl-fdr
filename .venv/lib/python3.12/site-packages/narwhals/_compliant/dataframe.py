@@ -8,6 +8,7 @@ from narwhals._compliant.typing import (
     CompliantDataFrameAny,
     CompliantExprT_contra,
     CompliantLazyFrameAny,
+    CompliantNamespaceAny,
     CompliantSeriesT,
     EagerExprT,
     EagerSeriesT,
@@ -29,6 +30,7 @@ from narwhals._utils import (
     Version,
     _StoresNative,
     check_columns_exist,
+    is_boolean_selector,
     is_compliant_series,
     is_index_selector,
     is_range,
@@ -37,6 +39,7 @@ from narwhals._utils import (
     is_slice_index,
     is_slice_none,
 )
+from narwhals.exceptions import MultiOutputExpressionError
 
 if TYPE_CHECKING:
     from io import BytesIO
@@ -99,6 +102,7 @@ class CompliantFrame(
 
     def __native_namespace__(self) -> ModuleType: ...
     def __narwhals_namespace__(self) -> Any: ...
+    def _with_native(self, df: _NativeFrameT) -> Self: ...
     def _with_version(self, version: Version) -> Self: ...
     @classmethod
     def from_native(cls, data: _NativeFrameT, /, *, context: _LimitedContext) -> Self: ...
@@ -152,7 +156,6 @@ class CompliantFrame(
     def sort(
         self, *by: str, descending: bool | Sequence[bool], nulls_last: bool
     ) -> Self: ...
-    def tail(self, n: int) -> Self: ...
     def unique(
         self,
         subset: Sequence[str] | None,
@@ -188,8 +191,17 @@ class CompliantDataFrame(
         data: Mapping[str, Any],
         /,
         *,
+        context: CompliantNamespaceAny,
+        schema: IntoSchema | Mapping[str, DType | None] | None,
+    ) -> Self: ...
+    @classmethod
+    def from_dicts(
+        cls,
+        data: Sequence[Mapping[str, Any]],
+        /,
+        *,
         context: _LimitedContext,
-        schema: IntoSchema | None,
+        schema: IntoSchema | Mapping[str, DType | None] | None,
     ) -> Self: ...
     @classmethod
     def from_numpy(
@@ -320,8 +332,12 @@ class EagerDataFrame(
     def to_narwhals(self) -> DataFrame[NativeDataFrameT]:
         return self._version.dataframe(self, level="full")
 
-    def aggregate(self, *exprs: EagerExprT) -> Self:
-        # NOTE: Ignore intermittent [False Negative]
+    def aggregate(self, *exprs: EagerExprT) -> Self:  # pyright: ignore[reportIncompatibleMethodOverride]
+        # NOTE: Ignore intermittent [False Negative] (1)
+        # Method "aggregate" overrides class "CompliantLazyFrame" in an incompatible manner
+        # Keyword parameter "exprs" type mismatch: base parameter is type "EagerExprT@EagerDataFrame", override parameter is type "EagerExprT@EagerDataFrame"
+        #  Type "EagerExprT@EagerDataFrame" is not assignable to type "EagerExprT@EagerDataFrame"
+        # NOTE: Ignore intermittent [False Negative] (2)
         # Argument of type "EagerExprT@EagerDataFrame" cannot be assigned to parameter "exprs" of type "EagerExprT@EagerDataFrame" in function "select"
         #  Type "EagerExprT@EagerDataFrame" is not assignable to type "EagerExprT@EagerDataFrame"
         return self.select(*exprs)  # pyright: ignore[reportArgumentType]
@@ -333,19 +349,24 @@ class EagerDataFrame(
     def _check_columns_exist(self, subset: Sequence[str]) -> ColumnNotFoundError | None:
         return check_columns_exist(subset, available=self.columns)
 
-    def _evaluate_expr(self, expr: EagerExprT, /) -> EagerSeriesT:
+    def _evaluate_single_output_expr(self, expr: EagerExprT, /) -> EagerSeriesT:
         """Evaluate `expr` and ensure it has a **single** output."""
-        result: Sequence[EagerSeriesT] = expr(self)
-        assert len(result) == 1  # debug assertion  # noqa: S101
-        return result[0]
-
-    def _evaluate_into_exprs(self, *exprs: EagerExprT) -> Sequence[EagerSeriesT]:
         # NOTE: Ignore intermittent [False Negative]
         # Argument of type "EagerExprT@EagerDataFrame" cannot be assigned to parameter "expr" of type "EagerExprT@EagerDataFrame" in function "_evaluate_into_expr"
         #  Type "EagerExprT@EagerDataFrame" is not assignable to type "EagerExprT@EagerDataFrame"
-        return list(chain.from_iterable(self._evaluate_into_expr(expr) for expr in exprs))  # pyright: ignore[reportArgumentType]
+        result = self._evaluate_expr(expr)  # pyright: ignore[reportArgumentType]
+        if len(result) != 1:  # pragma: no cover
+            msg = "multi-output expressions not allowed in this context"
+            raise MultiOutputExpressionError(msg)
+        return result[0]
 
-    def _evaluate_into_expr(self, expr: EagerExprT, /) -> Sequence[EagerSeriesT]:
+    def _evaluate_exprs(self, *exprs: EagerExprT) -> Sequence[EagerSeriesT]:
+        # NOTE: Ignore intermittent [False Negative]
+        # Argument of type "EagerExprT@EagerDataFrame" cannot be assigned to parameter "expr" of type "EagerExprT@EagerDataFrame" in function "_evaluate_into_expr"
+        #  Type "EagerExprT@EagerDataFrame" is not assignable to type "EagerExprT@EagerDataFrame"
+        return tuple(chain.from_iterable(self._evaluate_expr(expr) for expr in exprs))  # pyright: ignore[reportArgumentType]
+
+    def _evaluate_expr(self, expr: EagerExprT, /) -> Sequence[EagerSeriesT]:
         """Return list of raw columns.
 
         For eager backends we alias operations at each step.
@@ -396,7 +417,11 @@ class EagerDataFrame(
         if not is_slice_none(columns):
             if isinstance(columns, Sized) and len(columns) == 0:
                 return compliant.select()
-            if is_index_selector(columns):
+            if is_boolean_selector(columns):
+                compliant = compliant.simple_select(
+                    *(col for col, select in zip(compliant.columns, columns) if select)
+                )
+            elif is_index_selector(columns):
                 if is_slice_index(columns) or is_range(columns):
                     compliant = compliant._select_slice_index(columns)
                 elif is_compliant_series(columns):

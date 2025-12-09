@@ -90,7 +90,7 @@ def fetch_player_history(player_id: int) -> pd.DataFrame:
 # Ratings helpers
 # ---------------------------
 
-def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int]) -> pd.Series:
+def strength_to_fixed_cutpoints(series: pd.Series, cuts: Tuple[int, int, int, int, int]) -> pd.Series:
     c1, c2, c3, c4, c5 = cuts
     bins = [-np.inf, c1, c2, c3, c4, c5, np.inf]
     labels = [0, 1, 2, 3, 4, 5]
@@ -108,7 +108,7 @@ def table_ratings_fixed(table: pd.DataFrame, team: pd.DataFrame) -> Dict[int, Di
             for team_short, h, a in zip(table["Team"], home, away)}
 
 def default_ratings_fixed(teams: pd.DataFrame) -> Dict[int, Dict[str, int]]:
-    cuts = (1040, 1100, 1240, 1340)
+    cuts = (1000, 1040, 1100, 1240, 1340)
     # NOTE: mirrors your current mapping (home <- str_away, away <- str_home)
     home = strength_to_fixed_cutpoints(teams["str_away"], cuts=cuts)
     away = strength_to_fixed_cutpoints(teams["str_home"], cuts=cuts)

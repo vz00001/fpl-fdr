@@ -401,16 +401,16 @@ def apply_rolling_wo_thread(players_df_slice: pd.DataFrame, n: int) -> pd.DataFr
 
 # fpl-fdr/quick-test.py
 teams_df, fixtures_df, event_df, fetched_at, players_df = fetch_fpl_data()
-# import time
-# start=time.time()
-# print(apply_rolling(combine_filters("GK", 19, players_df), 5).head(20), "\nGK--------------------------------------------------------------------------------\n")
-# print(apply_rolling(combine_filters("DF", 19, players_df), 5).head(20), "\nDF--------------------------------------------------------------------------------\n")
-# print(apply_rolling(combine_filters("MF", 19, players_df), 5).head(20), "\nMF--------------------------------------------------------------------------------\n")
-# print(apply_rolling(combine_filters("FW", 19, players_df), 5).head(20), "\nFW--------------------------------------------------------------------------------\n")
-# print(apply_rolling(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL--------------------------------------------------------------------------------\n")
-# print("With threading time:", time.time()-start, "\n")
-# # start=time.time()   
-# # print(apply_rolling_wo_thread(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL without threading--------------------------------------------------------------------------------\n")
+import time
+start=time.time()
+print(apply_rolling(combine_filters("GK", 19, players_df), 5).head(20), "\nGK--------------------------------------------------------------------------------\n")
+print(apply_rolling(combine_filters("DF", 19, players_df), 5).head(20), "\nDF--------------------------------------------------------------------------------\n")
+print(apply_rolling(combine_filters("MF", 19, players_df), 5).head(20), "\nMF--------------------------------------------------------------------------------\n")
+print(apply_rolling(combine_filters("FW", 19, players_df), 5).head(20), "\nFW--------------------------------------------------------------------------------\n")
+print(apply_rolling(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL--------------------------------------------------------------------------------\n")
+print("With threading time:", time.time()-start, "\n")
+# start=time.time()   
+# print(apply_rolling_wo_thread(combine_filters("ALL", 19, players_df), 5).head(40), "\nALL without threading--------------------------------------------------------------------------------\n")
 # # print("Without threading time:", time.time()-start, "\n")
-table_df = build_pl_table(teams_df, fixtures_df)
-print(table_ratings_fixed(table_df, teams_df))
+# table_df = build_pl_table(teams_df, fixtures_df)
+# print(table_ratings_fixed(table_df, teams_df))

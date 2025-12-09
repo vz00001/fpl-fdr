@@ -330,7 +330,7 @@ class IbisLazyFrame(
         subset_ = subset or self.columns
         if error := self._check_columns_exist(subset_):
             raise error
-        tmp_name = generate_temporary_column_name(8, self.columns)
+        tmp_name = generate_temporary_column_name(8, self.columns, prefix="row_index_")
         if order_by and keep == "last":
             order_by_ = IbisExpr._sort(*order_by, descending=True, nulls_last=True)
         elif order_by:
@@ -422,13 +422,6 @@ class IbisLazyFrame(
             msg = "Writing to BytesIO is not supported for Ibis backend."
             raise NotImplementedError(msg)
         self.native.to_parquet(file)
-
-    gather_every = not_implemented.deprecated(
-        "`LazyFrame.gather_every` is deprecated and will be removed in a future version."
-    )
-    tail = not_implemented.deprecated(
-        "`LazyFrame.tail` is deprecated and will be removed in a future version."
-    )
 
     # Intentionally not implemented, as Ibis does its own expression rewriting.
     _evaluate_window_expr = not_implemented()

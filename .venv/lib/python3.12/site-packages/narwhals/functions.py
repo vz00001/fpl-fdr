@@ -3,22 +3,14 @@ from __future__ import annotations
 import platform
 import sys
 from collections.abc import Iterable, Mapping, Sequence
-from functools import partial
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
-from narwhals._expression_parsing import (
-    ExprKind,
-    ExprMetadata,
-    apply_n_ary_operation,
-    combine_metadata,
-    is_scalar_like,
-)
+from narwhals._expression_parsing import ExprKind, ExprNode, is_expr, is_series
 from narwhals._utils import (
     Implementation,
     Version,
     deprecate_native_namespace,
     flatten,
-    is_compliant_expr,
     is_eager_allowed,
     is_sequence_but_not_str,
     normalize_path,
@@ -33,7 +25,6 @@ from narwhals.dependencies import (
 )
 from narwhals.exceptions import InvalidOperationError
 from narwhals.expr import Expr
-from narwhals.series import Series
 from narwhals.translate import from_native, to_native
 
 if TYPE_CHECKING:
@@ -41,10 +32,12 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeAlias, TypeIs
 
-    from narwhals._compliant import CompliantExpr, CompliantNamespace
+    from narwhals._native import NativeDataFrame, NativeLazyFrame, NativeSeries
     from narwhals._translate import IntoArrowTable
     from narwhals._typing import Backend, EagerAllowed, IntoBackend
     from narwhals.dataframe import DataFrame, LazyFrame
+    from narwhals.dtypes import DType
+    from narwhals.series import Series
     from narwhals.typing import (
         ConcatMethod,
         FileSource,
@@ -52,11 +45,7 @@ if TYPE_CHECKING:
         IntoDType,
         IntoExpr,
         IntoSchema,
-        NativeDataFrame,
-        NativeLazyFrame,
-        NativeSeries,
         NonNestedLiteral,
-        _1DArray,
         _2DArray,
     )
 
@@ -76,9 +65,6 @@ def concat(items: Iterable[FrameT], *, how: ConcatMethod = "vertical") -> FrameT
                 when all inputs are (eager) DataFrames.
             - diagonal: Finds a union between the column schemas and fills missing column
                 values with null.
-
-    Returns:
-        A new DataFrame or LazyFrame resulting from the concatenation.
 
     Raises:
         TypeError: The items to concatenate should either all be eager, or all lazy
@@ -150,7 +136,7 @@ def concat(items: Iterable[FrameT], *, how: ConcatMethod = "vertical") -> FrameT
     if not items:
         msg = "No items to concatenate."
         raise ValueError(msg)
-    items = list(items)
+    items = tuple(items)
     validate_laziness(items)
     if how not in {"horizontal", "vertical", "diagonal"}:  # pragma: no cover
         msg = "Only vertical, horizontal and diagonal concatenations are supported."
@@ -190,9 +176,6 @@ def new_series(
                 `POLARS`, `MODIN` or `CUDF`.
             - As a string: `"pandas"`, `"pyarrow"`, `"polars"`, `"modin"` or `"cudf"`.
             - Directly as a module `pandas`, `pyarrow`, `polars`, `modin` or `cudf`.
-
-    Returns:
-        A new Series
 
     Examples:
         >>> import pandas as pd
@@ -246,7 +229,7 @@ def _new_series_impl(
 @deprecate_native_namespace(warn_version="1.26.0")
 def from_dict(
     data: Mapping[str, Any],
-    schema: IntoSchema | None = None,
+    schema: IntoSchema | Mapping[str, DType | None] | None = None,
     *,
     backend: IntoBackend[EagerAllowed] | None = None,
     native_namespace: ModuleType | None = None,  # noqa: ARG001
@@ -263,7 +246,9 @@ def from_dict(
     Arguments:
         data: Dictionary to create DataFrame from.
         schema: The DataFrame schema as Schema or dict of {name: type}. If not
-            specified, the schema will be inferred by the native library.
+            specified, the schema will be inferred by the native library. If
+            any `dtype` is `None`, the data type for that column will be inferred
+            by the native library.
         backend: specifies which eager backend instantiate to. Only
             necessary if inputs are not Narwhals Series.
 
@@ -274,9 +259,6 @@ def from_dict(
             - As a string: `"pandas"`, `"pyarrow"`, `"polars"`, `"modin"` or `"cudf"`.
             - Directly as a module `pandas`, `pyarrow`, `polars`, `modin` or `cudf`.
         native_namespace: deprecated, same as `backend`.
-
-    Returns:
-        A new DataFrame.
 
     Examples:
         >>> import pandas as pd
@@ -293,6 +275,9 @@ def from_dict(
     """
     if backend is None:
         data, backend = _from_dict_no_backend(data)
+    if schema and data and (diff := set(schema.keys()).symmetric_difference(data.keys())):
+        msg = f"Keys in `schema` and `data` are expected to match, found unmatched keys: {diff}"
+        raise InvalidOperationError(msg)
     implementation = Implementation.from_backend(backend)
     if is_eager_allowed(implementation):
         ns = Version.MAIN.namespace.from_backend(implementation).compliant
@@ -331,6 +316,66 @@ def _from_dict_no_backend(
     return data, native_namespace
 
 
+def from_dicts(
+    data: Sequence[Mapping[str, Any]],
+    schema: IntoSchema | Mapping[str, DType | None] | None = None,
+    *,
+    backend: IntoBackend[EagerAllowed],
+) -> DataFrame[Any]:
+    """Instantiate DataFrame from a sequence of dictionaries representing rows.
+
+    Notes:
+        For pandas-like dataframes, conversion to schema is applied after dataframe
+        creation.
+
+    Arguments:
+        data: Sequence with dictionaries mapping column name to value.
+        schema: The DataFrame schema as Schema or dict of {name: type}. If not
+            specified, the schema will be inferred by the native library. If
+            any `dtype` is `None`, the data type for that column will be inferred
+            by the native library.
+        backend: Specifies which eager backend instantiate to.
+
+            `backend` can be specified in various ways
+
+            - As `Implementation.<BACKEND>` with `BACKEND` being `PANDAS`, `PYARROW`,
+                `POLARS`, `MODIN` or `CUDF`.
+            - As a string: `"pandas"`, `"pyarrow"`, `"polars"`, `"modin"` or `"cudf"`.
+            - Directly as a module `pandas`, `pyarrow`, `polars`, `modin` or `cudf`.
+
+    Tip:
+        If you expect non-uniform keys in `data`, consider passing `schema` for
+        more consistent results, as **inference varies between backends**:
+
+        - pandas uses all rows
+        - polars uses the first 100 rows
+        - pyarrow uses only the first row
+
+    Examples:
+        >>> import polars as pl
+        >>> import narwhals as nw
+        >>> data = [
+        ...     {"item": "apple", "weight": 80, "price": 0.60},
+        ...     {"item": "egg", "weight": 55, "price": 0.40},
+        ... ]
+        >>> nw.DataFrame.from_dicts(data, backend="polars")
+        ┌──────────────────────────┐
+        |    Narwhals DataFrame    |
+        |--------------------------|
+        |shape: (2, 3)             |
+        |┌───────┬────────┬───────┐|
+        |│ item  ┆ weight ┆ price │|
+        |│ ---   ┆ ---    ┆ ---   │|
+        |│ str   ┆ i64    ┆ f64   │|
+        |╞═══════╪════════╪═══════╡|
+        |│ apple ┆ 80     ┆ 0.6   │|
+        |│ egg   ┆ 55     ┆ 0.4   │|
+        |└───────┴────────┴───────┘|
+        └──────────────────────────┘
+    """
+    return Version.MAIN.dataframe.from_dicts(data, schema, backend=backend)
+
+
 def from_numpy(
     data: _2DArray,
     schema: IntoSchema | Sequence[str] | None = None,
@@ -356,9 +401,6 @@ def from_numpy(
                 `POLARS`, `MODIN` or `CUDF`.
             - As a string: `"pandas"`, `"pyarrow"`, `"polars"`, `"modin"` or `"cudf"`.
             - Directly as a module `pandas`, `pyarrow`, `polars`, `modin` or `cudf`.
-
-    Returns:
-        A new DataFrame.
 
     Examples:
         >>> import numpy as np
@@ -438,9 +480,6 @@ def from_arrow(
                 `POLARS`, `MODIN` or `CUDF`.
             - As a string: `"pandas"`, `"pyarrow"`, `"polars"`, `"modin"` or `"cudf"`.
             - Directly as a module `pandas`, `pyarrow`, `polars`, `modin` or `cudf`.
-
-    Returns:
-        A new DataFrame.
 
     Examples:
         >>> import pandas as pd
@@ -583,9 +622,6 @@ def read_csv(
             For example, you could use
             `nw.read_csv('file.csv', backend='pandas', engine='pyarrow')`.
 
-    Returns:
-        DataFrame.
-
     Examples:
         >>> import narwhals as nw
         >>> nw.read_csv("file.csv", backend="pandas")  # doctest:+SKIP
@@ -655,9 +691,6 @@ def scan_csv(
         kwargs: Extra keyword arguments which are passed to the native CSV reader.
             For example, you could use
             `nw.scan_csv('file.csv', backend=pd, engine='pyarrow')`.
-
-    Returns:
-        LazyFrame.
 
     Examples:
         >>> import duckdb
@@ -733,9 +766,6 @@ def read_parquet(
         kwargs: Extra keyword arguments which are passed to the native parquet reader.
             For example, you could use
             `nw.read_parquet('file.parquet', backend=pd, engine='pyarrow')`.
-
-    Returns:
-        DataFrame.
 
     Examples:
         >>> import pyarrow as pa
@@ -827,9 +857,6 @@ def scan_parquet(
             For example, you could use
             `nw.scan_parquet('file.parquet', backend=pd, engine='pyarrow')`.
 
-    Returns:
-        LazyFrame.
-
     Examples:
         >>> import dask.dataframe as dd
         >>> from sqlframe.duckdb import DuckDBSession
@@ -907,9 +934,6 @@ def col(*names: str | Iterable[str]) -> Expr:
     Arguments:
         names: Name(s) of the columns to use.
 
-    Returns:
-        A new expression.
-
     Examples:
         >>> import polars as pl
         >>> import narwhals as nw
@@ -931,16 +955,7 @@ def col(*names: str | Iterable[str]) -> Expr:
         └──────────────────┘
     """
     flat_names = flatten(names)
-
-    def func(plx: Any) -> Any:
-        return plx.col(*flat_names)
-
-    return Expr(
-        func,
-        ExprMetadata.selector_single()
-        if len(flat_names) == 1
-        else ExprMetadata.selector_multi_named(),
-    )
+    return Expr(ExprNode(ExprKind.COL, "col", names=flat_names))
 
 
 def exclude(*names: str | Iterable[str]) -> Expr:
@@ -948,9 +963,6 @@ def exclude(*names: str | Iterable[str]) -> Expr:
 
     Arguments:
         names: Name(s) of the columns to exclude.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import polars as pl
@@ -972,12 +984,7 @@ def exclude(*names: str | Iterable[str]) -> Expr:
         |  └─────┘         |
         └──────────────────┘
     """
-    exclude_names = frozenset(flatten(names))
-
-    def func(plx: Any) -> Any:
-        return plx.exclude(exclude_names)
-
-    return Expr(func, ExprMetadata.selector_multi_unnamed())
+    return Expr(ExprNode(ExprKind.EXCLUDE, "exclude", names=frozenset(flatten(names))))
 
 
 def nth(*indices: int | Sequence[int]) -> Expr:
@@ -989,9 +996,6 @@ def nth(*indices: int | Sequence[int]) -> Expr:
 
     Arguments:
         indices: One or more indices representing the columns to retrieve.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import pyarrow as pa
@@ -1011,24 +1015,12 @@ def nth(*indices: int | Sequence[int]) -> Expr:
         └──────────────────┘
     """
     flat_indices = flatten(indices)
-
-    def func(plx: Any) -> Any:
-        return plx.nth(*flat_indices)
-
-    return Expr(
-        func,
-        ExprMetadata.selector_single()
-        if len(flat_indices) == 1
-        else ExprMetadata.selector_multi_unnamed(),
-    )
+    return Expr(ExprNode(ExprKind.NTH, "nth", indices=flat_indices))
 
 
 # Add underscore so it doesn't conflict with builtin `all`
 def all_() -> Expr:
     """Instantiate an expression representing all columns.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import pandas as pd
@@ -1044,15 +1036,12 @@ def all_() -> Expr:
         |   1  4  0.246    |
         └──────────────────┘
     """
-    return Expr(lambda plx: plx.all(), ExprMetadata.selector_multi_unnamed())
+    return Expr(ExprNode(ExprKind.ALL, "all"))
 
 
 # Add underscore so it doesn't conflict with builtin `len`
 def len_() -> Expr:
     """Return the number of rows.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import polars as pl
@@ -1073,11 +1062,7 @@ def len_() -> Expr:
         |  └─────┘         |
         └──────────────────┘
     """
-
-    def func(plx: Any) -> Any:
-        return plx.len()
-
-    return Expr(func, ExprMetadata.aggregation())
+    return Expr(ExprNode(ExprKind.AGGREGATION, "len"))
 
 
 def sum(*columns: str) -> Expr:
@@ -1088,9 +1073,6 @@ def sum(*columns: str) -> Expr:
 
     Arguments:
         columns: Name(s) of the columns to use in the aggregation function
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import pandas as pd
@@ -1116,9 +1098,6 @@ def mean(*columns: str) -> Expr:
 
     Arguments:
         columns: Name(s) of the columns to use in the aggregation function
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import pyarrow as pa
@@ -1151,9 +1130,6 @@ def median(*columns: str) -> Expr:
     Arguments:
         columns: Name(s) of the columns to use in the aggregation function
 
-    Returns:
-        A new expression.
-
     Examples:
         >>> import polars as pl
         >>> import narwhals as nw
@@ -1185,9 +1161,6 @@ def min(*columns: str) -> Expr:
     Arguments:
         columns: Name(s) of the columns to use in the aggregation function.
 
-    Returns:
-        A new expression.
-
     Examples:
         >>> import pyarrow as pa
         >>> import narwhals as nw
@@ -1217,9 +1190,6 @@ def max(*columns: str) -> Expr:
     Arguments:
         columns: Name(s) of the columns to use in the aggregation function.
 
-    Returns:
-        A new expression.
-
     Examples:
         >>> import pandas as pd
         >>> import narwhals as nw
@@ -1236,21 +1206,12 @@ def max(*columns: str) -> Expr:
     return col(*columns).max()
 
 
-def _expr_with_n_ary_op(
-    func_name: str,
-    operation_factory: Callable[
-        [CompliantNamespace[Any, Any]], Callable[..., CompliantExpr[Any, Any]]
-    ],
-    *exprs: IntoExpr,
-) -> Expr:
+def _expr_with_horizontal_op(name: str, *exprs: IntoExpr, **kwargs: Any) -> Expr:
     if not exprs:
-        msg = f"At least one expression must be passed to `{func_name}`"
+        msg = f"At least one expression must be passed to `{name}`"
         raise ValueError(msg)
     return Expr(
-        lambda plx: apply_n_ary_operation(
-            plx, operation_factory(plx), *exprs, str_as_lit=False
-        ),
-        ExprMetadata.from_horizontal_op(*exprs),
+        ExprNode(ExprKind.ELEMENTWISE, name, *exprs, **kwargs, allow_multi_output=True)
     )
 
 
@@ -1263,9 +1224,6 @@ def sum_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
     Arguments:
         exprs: Name(s) of the columns to use in the aggregation function. Accepts
             expression input.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import polars as pl
@@ -1288,9 +1246,7 @@ def sum_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
         |└─────┴──────┴─────┘|
         └────────────────────┘
     """
-    return _expr_with_n_ary_op(
-        "sum_horizontal", lambda plx: plx.sum_horizontal, *flatten(exprs)
-    )
+    return _expr_with_horizontal_op("sum_horizontal", *flatten(exprs))
 
 
 def min_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
@@ -1302,9 +1258,6 @@ def min_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
     Arguments:
         exprs: Name(s) of the columns to use in the aggregation function. Accepts
             expression input.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import pyarrow as pa
@@ -1325,9 +1278,7 @@ def min_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
         | h_min: [[1,5,3]] |
         └──────────────────┘
     """
-    return _expr_with_n_ary_op(
-        "min_horizontal", lambda plx: plx.min_horizontal, *flatten(exprs)
-    )
+    return _expr_with_horizontal_op("min_horizontal", *flatten(exprs))
 
 
 def max_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
@@ -1339,9 +1290,6 @@ def max_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
     Arguments:
         exprs: Name(s) of the columns to use in the aggregation function. Accepts
             expression input.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import polars as pl
@@ -1364,73 +1312,29 @@ def max_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
         |└─────┴──────┴───────┘|
         └──────────────────────┘
     """
-    return _expr_with_n_ary_op(
-        "max_horizontal", lambda plx: plx.max_horizontal, *flatten(exprs)
-    )
+    return _expr_with_horizontal_op("max_horizontal", *flatten(exprs))
 
 
 class When:
     def __init__(self, *predicates: IntoExpr | Iterable[IntoExpr]) -> None:
         self._predicate = all_horizontal(*flatten(predicates), ignore_nulls=False)
 
-    def then(self, value: IntoExpr | NonNestedLiteral | _1DArray) -> Then:
-        kind = ExprKind.from_into_expr(value, str_as_lit=False)
-        if self._predicate._metadata.is_scalar_like and not kind.is_scalar_like:
-            msg = (
-                "If you pass a scalar-like predicate to `nw.when`, then "
-                "the `then` value must also be scalar-like."
-            )
-            raise InvalidOperationError(msg)
-
+    def then(self, value: IntoExpr | NonNestedLiteral) -> Then:
         return Then(
-            lambda plx: apply_n_ary_operation(
-                plx,
-                lambda *args: plx.when(args[0]).then(args[1]),
+            ExprNode(
+                ExprKind.ELEMENTWISE,
+                "when_then",
                 self._predicate,
                 value,
-                str_as_lit=False,
-            ),
-            combine_metadata(
-                self._predicate,
-                value,
-                str_as_lit=False,
                 allow_multi_output=False,
-                to_single_output=False,
-            ),
+            )
         )
 
 
 class Then(Expr):
-    def otherwise(self, value: IntoExpr | NonNestedLiteral | _1DArray) -> Expr:
-        kind = ExprKind.from_into_expr(value, str_as_lit=False)
-        if self._metadata.is_scalar_like and not is_scalar_like(kind):
-            msg = (
-                "If you pass a scalar-like predicate to `nw.when`, then "
-                "the `otherwise` value must also be scalar-like."
-            )
-            raise InvalidOperationError(msg)
-
-        def func(plx: CompliantNamespace[Any, Any]) -> CompliantExpr[Any, Any]:
-            compliant_expr = self._to_compliant_expr(plx)
-            compliant_value = plx.parse_into_expr(value, str_as_lit=False)
-            if (
-                not self._metadata.is_scalar_like
-                and is_scalar_like(kind)
-                and is_compliant_expr(compliant_value)
-            ):
-                compliant_value = compliant_value.broadcast(kind)
-            return compliant_expr.otherwise(compliant_value)  # type: ignore[attr-defined, no-any-return]
-
-        return Expr(
-            func,
-            combine_metadata(
-                self,
-                value,
-                str_as_lit=False,
-                allow_multi_output=False,
-                to_single_output=False,
-            ),
-        )
+    def otherwise(self, value: IntoExpr | NonNestedLiteral) -> Expr:
+        node = self._nodes[0]
+        return Expr(ExprNode(ExprKind.ELEMENTWISE, "when_then", *node.exprs, value))
 
 
 def when(*predicates: IntoExpr | Iterable[IntoExpr]) -> When:
@@ -1488,9 +1392,6 @@ def all_horizontal(*exprs: IntoExpr | Iterable[IntoExpr], ignore_nulls: bool) ->
             - If `False`, Kleene logic is followed. Note that this is not allowed for
               pandas with classical NumPy dtypes when null values are present.
 
-    Returns:
-        A new expression.
-
     Examples:
         >>> import pyarrow as pa
         >>> import narwhals as nw
@@ -1515,12 +1416,9 @@ def all_horizontal(*exprs: IntoExpr | Iterable[IntoExpr], ignore_nulls: bool) ->
         |b: [[false,true,true,null,null,null]]    |
         |all: [[false,false,true,null,false,null]]|
         └─────────────────────────────────────────┘
-
     """
-    return _expr_with_n_ary_op(
-        "all_horizontal",
-        lambda plx: partial(plx.all_horizontal, ignore_nulls=ignore_nulls),
-        *flatten(exprs),
+    return _expr_with_horizontal_op(
+        "all_horizontal", *flatten(exprs), ignore_nulls=ignore_nulls
     )
 
 
@@ -1531,9 +1429,6 @@ def lit(value: NonNestedLiteral, dtype: IntoDType | None = None) -> Expr:
         value: The value to use as literal.
         dtype: The data type of the literal value. If not provided, the data type will
             be inferred by the native library.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import pandas as pd
@@ -1560,7 +1455,7 @@ def lit(value: NonNestedLiteral, dtype: IntoDType | None = None) -> Expr:
         msg = f"Nested datatypes are not supported yet. Got {value}"
         raise NotImplementedError(msg)
 
-    return Expr(lambda plx: plx.lit(value, dtype), ExprMetadata.literal())
+    return Expr(ExprNode(ExprKind.LITERAL, "lit", value=value, dtype=dtype))
 
 
 def any_horizontal(*exprs: IntoExpr | Iterable[IntoExpr], ignore_nulls: bool) -> Expr:
@@ -1575,9 +1470,6 @@ def any_horizontal(*exprs: IntoExpr | Iterable[IntoExpr], ignore_nulls: bool) ->
               is `False`.
             - If `False`, Kleene logic is followed. Note that this is not allowed for
               pandas with classical NumPy dtypes when null values are present.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import polars as pl
@@ -1609,10 +1501,8 @@ def any_horizontal(*exprs: IntoExpr | Iterable[IntoExpr], ignore_nulls: bool) ->
         |└───────┴───────┴───────┘|
         └─────────────────────────┘
     """
-    return _expr_with_n_ary_op(
-        "any_horizontal",
-        lambda plx: partial(plx.any_horizontal, ignore_nulls=ignore_nulls),
-        *flatten(exprs),
+    return _expr_with_horizontal_op(
+        "any_horizontal", *flatten(exprs), ignore_nulls=ignore_nulls
     )
 
 
@@ -1622,9 +1512,6 @@ def mean_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
     Arguments:
         exprs: Name(s) of the columns to use in the aggregation function. Accepts
             expression input.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import pyarrow as pa
@@ -1646,9 +1533,7 @@ def mean_horizontal(*exprs: IntoExpr | Iterable[IntoExpr]) -> Expr:
         | a: [[2.5,6.5,3]] |
         └──────────────────┘
     """
-    return _expr_with_n_ary_op(
-        "mean_horizontal", lambda plx: plx.mean_horizontal, *flatten(exprs)
-    )
+    return _expr_with_horizontal_op("mean_horizontal", *flatten(exprs))
 
 
 def concat_str(
@@ -1669,9 +1554,6 @@ def concat_str(
         ignore_nulls: Ignore null values (default is `False`).
             If set to `False`, null values will be propagated and if the row contains any
             null values, the output is null.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import pandas as pd
@@ -1700,12 +1582,8 @@ def concat_str(
         └──────────────────┘
     """
     flat_exprs = flatten([*flatten([exprs]), *more_exprs])
-    return _expr_with_n_ary_op(
-        "concat_str",
-        lambda plx: lambda *args: plx.concat_str(
-            *args, separator=separator, ignore_nulls=ignore_nulls
-        ),
-        *flat_exprs,
+    return _expr_with_horizontal_op(
+        "concat_str", *flat_exprs, separator=separator, ignore_nulls=ignore_nulls
     )
 
 
@@ -1723,9 +1601,6 @@ def coalesce(
 
     Raises:
         TypeError: If any of the inputs are not a str, nw.Expr, or nw.Series.
-
-    Returns:
-        A new expression.
 
     Examples:
         >>> import polars as pl
@@ -1758,18 +1633,59 @@ def coalesce(
     """
     flat_exprs = flatten([*flatten([exprs]), *more_exprs])
 
-    non_exprs = [expr for expr in flat_exprs if not isinstance(expr, (str, Expr, Series))]
+    non_exprs = [
+        expr
+        for expr in flat_exprs
+        if not (isinstance(expr, str) or is_expr(expr) or is_series(expr))
+    ]
     if non_exprs:
         msg = (
-            f"All arguments to `coalesce` must be of type {str!r}, {Expr!r}, or {Series!r}."
+            f"All arguments to `coalesce` must be of type {str!r}, Expr, or Series."
             "\nGot the following invalid arguments (type, value):"
             f"\n    {', '.join(repr((type(e), e)) for e in non_exprs)}"
         )
         raise TypeError(msg)
 
     return Expr(
-        lambda plx: apply_n_ary_operation(
-            plx, lambda *args: plx.coalesce(*args), *flat_exprs, str_as_lit=False
-        ),
-        ExprMetadata.from_horizontal_op(*flat_exprs),
+        ExprNode(ExprKind.ELEMENTWISE, "coalesce", *flat_exprs, allow_multi_output=True)
     )
+
+
+def format(f_string: str, *args: IntoExpr) -> Expr:
+    """Format expressions as a string.
+
+    Arguments:
+        f_string: A string that with placeholders.
+        args: Expression(s) that fill the placeholders.
+
+    Examples:
+        >>> import duckdb
+        >>> import narwhals as nw
+        >>> rel = duckdb.sql("select * from values ('a', 1), ('b', 2), ('c', 3) df(a, b)")
+        >>> df = nw.from_native(rel)
+        >>> df.with_columns(formatted=nw.format("foo_{}_bar_{}", nw.col("a"), "b"))
+        ┌─────────────────────────────────┐
+        |       Narwhals LazyFrame        |
+        |---------------------------------|
+        |┌─────────┬───────┬─────────────┐|
+        |│    a    │   b   │  formatted  │|
+        |│ varchar │ int32 │   varchar   │|
+        |├─────────┼───────┼─────────────┤|
+        |│ a       │     1 │ foo_a_bar_1 │|
+        |│ b       │     2 │ foo_b_bar_2 │|
+        |│ c       │     3 │ foo_c_bar_3 │|
+        |└─────────┴───────┴─────────────┘|
+        └─────────────────────────────────┘
+    """
+    if (n_placeholders := f_string.count("{}")) != len(args):
+        msg = f"number of placeholders should equal the number of arguments. Expected {n_placeholders} arguments, got {len(args)}."
+        raise ValueError(msg)
+
+    exprs = []
+    it = iter(args)
+    for i, s in enumerate(f_string.split("{}")):
+        if i > 0:
+            exprs.append(next(it))
+        if len(s) > 0:
+            exprs.append(lit(s))
+    return concat_str(exprs, separator="")

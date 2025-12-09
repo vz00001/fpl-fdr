@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
     from typing import Any
 
+    import _typeshed
     from typing_extensions import Self, TypeIs
 
     from narwhals.typing import IntoDType, TimeUnit
@@ -33,14 +34,12 @@ def _validate_dtype(dtype: DType | type[DType]) -> None:
 
 def _is_into_dtype(obj: Any) -> TypeIs[IntoDType]:
     return isinstance(obj, DType) or (
-        isinstance(obj, type)
-        and issubclass(obj, DType)
-        and not issubclass(obj, NestedType)
+        isinstance(obj, DTypeClass) and not issubclass(obj, NestedType)
     )
 
 
 def _is_nested_type(obj: Any) -> TypeIs[type[NestedType]]:
-    return isinstance(obj, type) and issubclass(obj, NestedType)
+    return isinstance(obj, DTypeClass) and issubclass(obj, NestedType)
 
 
 def _validate_into_dtype(dtype: Any) -> None:
@@ -59,8 +58,40 @@ def _validate_into_dtype(dtype: Any) -> None:
         raise TypeError(msg)
 
 
-class DType:
-    def __repr__(self) -> str:  # pragma: no cover
+class DTypeClass(type):
+    """Metaclass for DType classes.
+
+    - Nicely print classes.
+    - Ensure [`__slots__`] are always defined to prevent `__dict__` creation (empty by default).
+
+    [`__slots__`]: https://docs.python.org/3/reference/datamodel.html#object.__slots__
+    """
+
+    def __repr__(cls) -> str:
+        return cls.__name__
+
+    # https://github.com/python/typeshed/blob/776508741d76b58f9dcb2aaf42f7d4596a48d580/stdlib/abc.pyi#L13-L19
+    # https://github.com/python/typeshed/blob/776508741d76b58f9dcb2aaf42f7d4596a48d580/stdlib/_typeshed/__init__.pyi#L36-L40
+    # https://github.com/astral-sh/ruff/issues/8353#issuecomment-1786238311
+    # https://docs.python.org/3/reference/datamodel.html#creating-the-class-object
+    def __new__(
+        metacls: type[_typeshed.Self],
+        cls_name: str,
+        bases: tuple[type, ...],
+        namespace: dict[str, Any],
+        /,
+        **kwds: Any,
+    ) -> _typeshed.Self:
+        namespace.setdefault("__slots__", ())
+        return super().__new__(metacls, cls_name, bases, namespace, **kwds)  # type: ignore[no-any-return, misc]
+
+
+class DType(metaclass=DTypeClass):
+    """Base class for all Narwhals data types."""
+
+    __slots__ = ()  # NOTE: Keep this one defined manually for the type checker
+
+    def __repr__(self) -> str:
         return self.__class__.__qualname__
 
     @classmethod
@@ -70,13 +101,11 @@ class DType:
         Examples:
             >>> import narwhals as nw
             >>> nw.Datetime("us").base_type()
-            <class 'narwhals.dtypes.Datetime'>
-
+            Datetime
             >>> nw.String.base_type()
-            <class 'narwhals.dtypes.String'>
-
+            String
             >>> nw.List(nw.Int64).base_type()
-            <class 'narwhals.dtypes.List'>
+            List
         """
         return cls
 
@@ -141,8 +170,6 @@ class DType:
             >>> nw.Date() == nw.Datetime
             False
         """
-        from narwhals._utils import isinstance_or_issubclass
-
         return isinstance_or_issubclass(other, type(self))
 
     def __hash__(self) -> int:
@@ -402,7 +429,7 @@ class Unknown(DType):
     """
 
 
-class _DatetimeMeta(type):
+class _DatetimeMeta(DTypeClass):
     @property
     def time_unit(cls) -> TimeUnit:
         """Unit of time. Defaults to `'us'` (microseconds)."""
@@ -437,6 +464,8 @@ class Datetime(TemporalType, metaclass=_DatetimeMeta):
         >>> nw.from_native(s_native, series_only=True).dtype
         Datetime(time_unit='ms', time_zone='Africa/Accra')
     """
+
+    __slots__ = ("time_unit", "time_zone")
 
     def __init__(
         self, time_unit: TimeUnit = "us", time_zone: str | timezone | None = None
@@ -494,7 +523,7 @@ class Datetime(TemporalType, metaclass=_DatetimeMeta):
         return f"{class_name}(time_unit={self.time_unit!r}, time_zone={self.time_zone!r})"
 
 
-class _DurationMeta(type):
+class _DurationMeta(DTypeClass):
     @property
     def time_unit(cls) -> TimeUnit:
         """Unit of time. Defaults to `'us'` (microseconds)."""
@@ -520,6 +549,8 @@ class Duration(TemporalType, metaclass=_DurationMeta):
         >>> nw.from_native(s_native, series_only=True).dtype
         Duration(time_unit='ms')
     """
+
+    __slots__ = ("time_unit",)
 
     def __init__(self, time_unit: TimeUnit = "us") -> None:
         if time_unit not in {"s", "ms", "us", "ns"}:
@@ -586,6 +617,8 @@ class Enum(DType):
        Enum(categories=['beluga', 'narwhal', 'orca'])
     """
 
+    __slots__ = ("_cached_categories", "_delayed_categories")
+
     def __init__(self, categories: Iterable[str] | type[enum.Enum]) -> None:
         self._delayed_categories: _DeferredIterable[str] | None = None
         self._cached_categories: tuple[str, ...] | None = None
@@ -600,9 +633,9 @@ class Enum(DType):
     @property
     def categories(self) -> tuple[str, ...]:
         """The categories in the dataset."""
-        if cached := self._cached_categories:
+        if (cached := self._cached_categories) is not None:
             return cached
-        if delayed := self._delayed_categories:
+        if (delayed := self._delayed_categories) is not None:
             self._cached_categories = delayed.to_tuple()
             return self._cached_categories
         msg = f"Internal structure of {type(self).__name__!r} is invalid."  # pragma: no cover
@@ -628,7 +661,7 @@ class Enum(DType):
             >>> nw.Enum(["a", "b", "c"]) == nw.Enum
             True
         """
-        if type(other) is type:
+        if type(other) is DTypeClass:
             return other is Enum
         return isinstance(other, type(self)) and self.categories == other.categories
 
@@ -655,6 +688,7 @@ class Field:
        [Field('a', Int64), Field('b', List(String))]
     """
 
+    __slots__ = ("dtype", "name")
     name: str
     """The name of the field within its parent `Struct`."""
     dtype: IntoDType
@@ -713,6 +747,7 @@ class Struct(NestedType):
        Struct({'a': Int64, 'b': List(String)})
     """
 
+    __slots__ = ("fields",)
     fields: list[Field]
     """The fields that make up the struct."""
 
@@ -741,7 +776,7 @@ class Struct(NestedType):
             >>> nw.Struct({"a": nw.Int64}) == nw.Struct
             True
         """
-        if type(other) is type and issubclass(other, self.__class__):
+        if type(other) is DTypeClass and issubclass(other, self.__class__):
             return True
         if isinstance(other, self.__class__):
             return self.fields == other.fields
@@ -782,6 +817,7 @@ class List(NestedType):
        List(String)
     """
 
+    __slots__ = ("inner",)
     inner: IntoDType
     """The DType of the values within each list."""
 
@@ -803,7 +839,7 @@ class List(NestedType):
             >>> nw.List(nw.Int64) == nw.List
             True
         """
-        if type(other) is type and issubclass(other, self.__class__):
+        if type(other) is DTypeClass and issubclass(other, self.__class__):
             return True
         if isinstance(other, self.__class__):
             return self.inner == other.inner
@@ -832,6 +868,7 @@ class Array(NestedType):
         Array(Int32, shape=(2,))
     """
 
+    __slots__ = ("inner", "shape", "size")
     inner: IntoDType
     """The DType of the values within each array."""
     size: int
@@ -875,7 +912,7 @@ class Array(NestedType):
             >>> nw.Array(nw.Int64, 2) == nw.Array
             True
         """
-        if type(other) is type and issubclass(other, self.__class__):
+        if type(other) is DTypeClass and issubclass(other, self.__class__):
             return True
         if isinstance(other, self.__class__):
             if self.shape != other.shape:
