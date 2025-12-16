@@ -46,7 +46,7 @@ def load_fpl_data():
 
 # ------------- UI-only helpers (styling etc.) -------------
 FPL_FDR_COLORS = {
-    1: "#34a853", 2: "#01FC7A", 3: "#E7E7E7", 4: "#E60023", 5: "#80072d",
+    0: "#34a853", 1: "#34a853", 2: "#01FC7A", 3: "#E7E7E7", 4: "#E60023", 5: "#80072d",
 }
 
 def _round_half_up(x: float) -> int:
