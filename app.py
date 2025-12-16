@@ -76,7 +76,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
                 # keep an em dash or label; optional tooltip
                 html_df.at[i, col] = f'<span class="fdr-tt" data-tt="No fixture scheduled">{label}</span>'
             else: 
-                level = int(max(1, min(5, _round_half_up(float(v)))))
+                level = int(max(0, min(5, _round_half_up(float(v)))))
                 bg = FPL_FDR_COLORS[level]
                 fg = "#000000" if (2 <= level <= 4) else "#FFFFFF"
                 css.at[i, col] = f"background-color:{bg}; color:{fg}; text-align:center;"
@@ -106,7 +106,7 @@ def style_fpl_like(disp_df: pd.DataFrame, val_df: pd.DataFrame) -> Styler:
 
 
 # --------------------------- App ---------------------------
-st.title("Fixture Difficulty Rating")
+st.title("FPL FDR")
 
 with st.spinner("Loading FPL data..."):
     teams_df, fixtures_df, event_df, fetched_at, players_df = load_fpl_data()
@@ -278,7 +278,7 @@ else:
     filtered = filtered.sort_values(by="ict_index", ascending=False)
 
 # --- Pagination controls (cleaner; placed below the table later)
-page_size = st.selectbox("Rows per page", [10, 20, 40], index=0, key="ict_page_size")
+page_size = st.selectbox("Rows per page", [15, 30, 45], index=0, key="ict_page_size")
 total_rows = len(filtered)
 total_pages = max(1, (total_rows + page_size - 1) // page_size)
 pg_key = "ict_page_index"
