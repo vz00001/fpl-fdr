@@ -238,7 +238,7 @@ def build_ticker(
                         opp_rating_away=ratings[opp_id]["away"],
                         method=method, w_team=w_team, w_opp=w_opp,
                     )
-                    diffs.append(float(np.clip(d, 1.0, 5.0))); labels.append(label)
+                    diffs.append(float(np.clip(d, 0, 5.0))); labels.append(label)
                 display_cells[str(gw)] = " / ".join(labels)
                 value_cells[str(gw)] = float(np.mean(diffs))
                 total += sum(diffs)
