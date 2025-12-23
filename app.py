@@ -278,7 +278,7 @@ else:
     filtered = filtered.sort_values(by="ict_index", ascending=False)
 
 # --- Pagination controls (cleaner; placed below the table later)
-page_size = st.selectbox("Rows per page", [15, 30, 45], index=0, key="ict_page_size")
+page_size = st.selectbox("Rows per page", [20, 40, 60], index=0, key="ict_page_size")
 total_rows = len(filtered)
 total_pages = max(1, (total_rows + page_size - 1) // page_size)
 pg_key = "ict_page_index"
