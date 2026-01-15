@@ -9,7 +9,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "fpl_core.py"  
+MODULE_PATH = Path(__file__).resolve().parents[1] / "fpl/fpl_core.py"  
 spec = importlib.util.spec_from_file_location("app", str(MODULE_PATH))
 app = importlib.util.module_from_spec(spec)
 sys.modules["app"] = app

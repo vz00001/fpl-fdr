@@ -5,10 +5,9 @@ import pandas as pd
 import streamlit as st
 from pandas.io.formats.style import Styler  # for type hints only
 
-import fpl_core as core  # <- our logic module
+import fpl_core .fpl_core as core
 from importlib import reload
 core = reload(core)
-
 
 st.set_page_config(page_title="Fixture Difficulty Rating", layout="wide")
 st.markdown("""
@@ -404,3 +403,5 @@ if fetched_at is not None:
 src = "Source: FPL fixtures (finished matches only). ^0.6.1"
 tail = " • ".join(bits) + (" • " if bits else "")
 st.caption(f"{tail}{src}")
+
+print(bits)
