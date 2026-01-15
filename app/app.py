@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 from pandas.io.formats.style import Styler  # for type hints only
 
-import fpl_core .fpl_core as core
+import fpl_core.fpl_core as core
 from importlib import reload
 core = reload(core)
 
