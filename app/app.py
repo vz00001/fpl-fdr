@@ -219,8 +219,10 @@ with st.sidebar:
         )
     sel_price = float(st.session_state["ict_price"])
     # --- Over previous gameweeks (N) + chevrons
+    completed_gws = int(event_df["finished"].sum())
     min_games = 1
-    max_games = max(min_games, int(max(1, current_gw)) - 1)
+    max_games = max(1, completed_gws)
+
     if "ict_prev_games" not in st.session_state:
         st.session_state["ict_prev_games"] = (
             max_games  # default to as many as available
@@ -238,15 +240,27 @@ with st.sidebar:
         st.session_state["ict_prev_games"] = min(
             max_games, st.session_state["ict_prev_games"] + 1
         )
+    
+    if "ict_prev_games" not in st.session_state:
+        st.session_state["ict_prev_games"] = min_games
+    
+    st.session_state["ict_prev_games"] = max(
+        min_games,
+        min(st.session_state["ict_prev_games"], max_games),
+    )
+    
     with g2:
-        st.slider(
-            "Over previous gameweeks",
-            min_value=min_games,
-            max_value=max_games,
-            step=1,
-            key="ict_prev_games",  # <-- same key as the chevrons mutate
-            help="Use the chevrons to fine-tune, or drag the slider.",
-        )
+        if max_games == min_games:
+            st.session_state["ict_prev_games"] = min_games
+            st.caption("Previous gameweeks")
+            st.write(f"**{min_games}**")
+        else:
+            st.slider(
+                "Over previous gameweeks",
+                min_value=min_games,
+                max_value=max_games,
+                key="ict_prev_games",
+            )
 
     # --- Sidebar: Team visibility ---
     st.subheader("Teams")
